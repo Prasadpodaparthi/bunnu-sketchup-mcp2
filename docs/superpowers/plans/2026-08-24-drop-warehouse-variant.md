@@ -22,6 +22,7 @@
   - `git grep -in 'buildprofile\|build_profile\|--variant' -- ':!docs/superpowers/*'`
 - **Базовые счётчики тестов до работы:** Ruby — 425 runs / 1149 assertions; Python — 177 tests. Обе сюиты зелёные.
 - **Тест сборки удаляет `.rbz` из `mcp_for_sketchup/`.** `ruby test/run_all.rb` вычищает `mcp_for_sketchup_v*.rbz` — это ожидаемое поведение, а не поломка.
+- **Коммиты стейджат явные пути.** Никогда `git add -A .` и `git add .`: в рабочем дереве лежит неотслеживаемый и не покрытый `.gitignore` каталог `.venv.broken-task8/`, который широкий add затянет в коммит. И не перечисляйте в `git add` пути, уже удалённые через `git rm` — команда прервётся с `pathspec did not match any files`, а `git rm` эти удаления уже застейджил.
 
 ---
 
@@ -60,11 +61,13 @@ git rm test/test_extension_json.rb
 
 ```ruby
 # test/test_version_pair.rb
-# T-21: у релиза две Ruby-точки бампа версии — package.rb VERSION
-# и Core::Compat::SERVER_VERSION. Handshake рапортует SERVER_VERSION,
-# а package.rb на post-build-проверке сверяет свой VERSION с ext.version
-# в загрузчике — разъезд пары даёт .rbz с противоречивой
-# самоидентификацией. Python-сторона закрыта зеркальным
+# T-21: у релиза три Ruby-литерала версии, правящихся вручную, —
+# package.rb VERSION, ext.version в загрузчике mcp_for_sketchup.rb
+# и Core::Compat::SERVER_VERSION. Разъезд любой пары даёт .rbz с
+# противоречивой самоидентификацией, и все три замкнуты на тестовом
+# прогоне: здесь сверяются package.rb VERSION и SERVER_VERSION, а
+# загрузчик — транзитивно, через post-build-проверку внутри package.rb,
+# которую запускает тест сборки. Python-сторона закрыта зеркальным
 # tests/test_compat.py::test_python_version_matches_installed_metadata.
 require "minitest/autorun"
 
@@ -106,9 +109,10 @@ Expected: `0 failures, 0 errors, 0 skips`. Число runs падает с 425 �
 
 - [ ] **Step 8: Коммит**
 
+`git rm` already staged the three deletions, so stage only the new file — naming a deleted path here aborts the command with `pathspec did not match any files`. Never use a bare `git add -A .` or `git add .`: the worktree holds an untracked, un-ignored `.venv.broken-task8/` that a broad add would sweep in.
+
 ```bash
-git add -A mcp_for_sketchup/extension.json test/test_extension_json.rb \
-          test/test_version_triple.rb test/test_version_pair.rb
+git add test/test_version_pair.rb
 git commit -m "chore: drop extension.json, the Extension Warehouse metadata file
 
 It never shipped inside the .rbz — package.rb excludes it because the
@@ -145,6 +149,7 @@ takes the release from seven version-bump points down to six."
 # загрузчик и одноимённая папка — сервис подписи Trimble отвергает всё
 # остальное в корне с «Extra files found».
 require "minitest/autorun"
+require "open3"
 require "zip"
 
 class TestPackageOutput < Minitest::Test
@@ -154,9 +159,12 @@ class TestPackageOutput < Minitest::Test
     Dir.chdir(PKG_DIR) do
       # Чистим прежние артефакты, чтобы проверять именно этот прогон.
       Dir.glob("mcp_for_sketchup_v*.rbz").each { |f| File.delete(f) }
-      ok = system({ "RUBYOPT" => nil }, "ruby", "package.rb",
-                  out: File::NULL, err: File::NULL)
-      assert ok, "package.rb exited non-zero"
+      # stderr захватываем, а не выбрасываем: post-build-проверки внутри
+      # package.rb (загрузчик на месте, display-имя, версия) прерывают
+      # сборку сообщением о том, какая именно не прошла. С err: File::NULL
+      # любая из них выглядит как безликое «exited non-zero».
+      _out, err, status = Open3.capture3({ "RUBYOPT" => nil }, "ruby", "package.rb")
+      assert status.success?, "package.rb exited non-zero; stderr:\n#{err}"
 
       files = Dir.glob("mcp_for_sketchup_v*.rbz")
       assert_equal 1, files.length,
@@ -309,9 +317,11 @@ Expected: `0 failures, 0 errors, 0 skips`. Число runs падает с 422 �
 
 - [ ] **Step 9: Коммит**
 
+`git rm` already staged the deletion of `test/test_package_default_variant.rb`, so do not name it here — a deleted path aborts the command with `pathspec did not match any files`. Never use a bare `git add -A .` or `git add .`: the worktree holds an untracked, un-ignored `.venv.broken-task8/` that a broad add would sweep in.
+
 ```bash
-git add -A mcp_for_sketchup/package.rb mcp_for_sketchup/mcp_for_sketchup/main.rb \
-          .gitignore test/test_package_output.rb test/test_package_default_variant.rb
+git add mcp_for_sketchup/package.rb mcp_for_sketchup/mcp_for_sketchup/main.rb \
+        .gitignore test/test_package_output.rb
 git commit -m "build: collapse the dual-variant build into a single .rbz
 
 The two variants differed in one baked constant that told the plugin
@@ -595,10 +605,11 @@ Expected: `0 failures, 0 errors, 0 skips`. Число runs падает с 420 �
 
 - [ ] **Step 14: Коммит**
 
+`git rm` already staged the deletion of `test/test_build_profile_fixture.rb`, so do not name it here — a deleted path aborts the command with `pathspec did not match any files`. Never use a bare `git add -A .` or `git add .`: the worktree holds an untracked, un-ignored `.venv.broken-task8/` that a broad add would sweep in.
+
 ```bash
-git add -A mcp_for_sketchup/mcp_for_sketchup/core/config.rb test/test_config.rb \
-          test/test_settings_dialog.rb test/test_dispatch_post_handshake.rb \
-          test/test_build_profile_fixture.rb
+git add mcp_for_sketchup/mcp_for_sketchup/core/config.rb test/test_config.rb \
+        test/test_settings_dialog.rb test/test_dispatch_post_handshake.rb
 git commit -m "feat: ship eval_ruby enabled, drop the build-time gate default
 
 The sentinel-nil default and the BuildProfile lookup behind it existed
