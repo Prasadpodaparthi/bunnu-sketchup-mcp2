@@ -31,18 +31,11 @@ git status                              # tree should have no tracked-file modif
 
 If HEAD has diverged from `origin/master`, decide **rebase** vs **merge** before the bump commit.
 
-```bash
-# Confirm Trimble product_id matches the new identity (v0.2.0+).
-grep '"product_id"' mcp_for_sketchup/extension.json
-# Expected: "product_id": "MCP_FOR_SKETCHUP"
-```
-
-## 1. Bump version in 7 places (must match)
+## 1. Bump version in 6 places (must match)
 
 - `pyproject.toml` — `version = "X.Y.Z"`
 - `src/sketchup_mcp/__init__.py` — `__version__ = "X.Y.Z"`
 - `src/sketchup_mcp/compat.py` — `MAX_RUBY = "X.Y.Z"` (and `MIN_RUBY` only if this release breaks wire/handler contract with the previous Ruby plugin)
-- `mcp_for_sketchup/extension.json` — `"version": "X.Y.Z"`
 - `mcp_for_sketchup/package.rb` — `VERSION = 'X.Y.Z'`
 - `mcp_for_sketchup/mcp_for_sketchup.rb` — `ext.version = 'X.Y.Z'`
 - `mcp_for_sketchup/mcp_for_sketchup/core/compat.rb` — `SERVER_VERSION = "X.Y.Z"` and `MAX_PYTHON = "X.Y.Z"` (and `MIN_PYTHON` only if this release breaks wire/handler contract with the previous Python client)
@@ -53,7 +46,7 @@ grep '"product_id"' mcp_for_sketchup/extension.json
 * `test_max_ruby_matches_python_version` (Python) — Python's view of Ruby max must equal current `CLIENT_VERSION` at release time.
 * `test_max_python_matches_server_version` (Ruby) — Ruby's view of Python max must equal plugin `SERVER_VERSION` at release time.
 
-**Contract break — floors bumped in v0.3.0 (2026-07-02; batches 1+2, branch `fix/deep-review-p2`):** `transform_component.position` switched from a relative offset to an absolute bbox-min target (`feat!`, commit `6b7d133`): an old/new client–server mix would pass the handshake but silently misplace geometry. Batch 2 widened the same break — new tool parameters (`name`, `limit`/`offset`/`response_format`), stricter validation (min dimensions 0.1 mm for cube / 1.0 mm for curved types, dovetail angle ≤ 60°, non-zero scale), and changed response shapes (`list/find_components` pagination envelope, `bbox_mm: null` for empty bounds, screenshot metadata block, `export` warning field). v0.3.0 bumps **both MIN floors to `0.3.0`** (`MIN_RUBY` Python-side, `MIN_PYTHON` Ruby-side) — the handshake is now exact-match `0.3.0`↔`0.3.0`, so an incompatible mix is rejected at the handshake instead of silently misbehaving. Call out the new semantics in the GitHub release notes.
+**Contract break — floors bumped in v0.3.0 (2026-07-02; batches 1+2, branch `fix/deep-review-p2`):** `transform_component.position` switched from a relative offset to an absolute bbox-min target (`feat!`, commit `6b7d133`): an old/new client–server mix would pass the handshake but silently misplace geometry. Batch 2 widened the same break — new tool parameters (`name`, `limit`/`offset`/`response_format`), stricter validation (min dimensions 0.1 mm for cube / 1.0 mm for curved types, dovetail angle ≤ 60°, non-zero scale), and changed response shapes (`list/find_components` pagination envelope, `bbox_mm: null` for empty bounds, screenshot metadata block, `export` warning field). v0.3.0 bumps **both MIN floors to `0.3.0`** (`MIN_RUBY` Python-side, `MIN_PYTHON` Ruby-side) — from that release the handshake was exact-match `0.3.0`↔`0.3.0`, so an incompatible mix is rejected at the handshake instead of silently misbehaving. Call out the new semantics in the GitHub release notes. `0.3.1` is packaging and copy only, so the floors stay at `0.3.0` and the supported range is `0.3.0..0.3.1` on both sides.
 
 Run `uv lock` to refresh `uv.lock` with the new project version (otherwise the next `uv` call updates it post-release and you end up with a stray `chore: sync uv.lock` commit). Commit (`chore: bump to vX.Y.Z`) and push.
 
@@ -70,8 +63,7 @@ ruby test/run_all.rb             # Ruby — must be green
 rm -rf dist/ mcp_for_sketchup/*.rbz
 uv build                                              # → dist/*.whl + dist/*.tar.gz
 uvx twine check dist/*                                # validate metadata / README rendering
-(cd mcp_for_sketchup && ruby package.rb --variant=warehouse)  # → mcp_for_sketchup_vX.Y.Z-warehouse.rbz
-(cd mcp_for_sketchup && ruby package.rb --variant=github)     # → mcp_for_sketchup_vX.Y.Z-github.rbz
+(cd mcp_for_sketchup && ruby package.rb)   # → mcp_for_sketchup_vX.Y.Z.rbz
 ```
 
 `package.rb` needs the `rubyzip` gem: `gem install --user-install rubyzip`.
@@ -107,7 +99,7 @@ uvx twine upload dist/*
 
 ## 6. Git tag + GitHub Release
 
-Attach both `.rbz` variants (see [§3](#3-build-artifacts)) plus the Python wheel/sdist. The github variant attached here must already be self-signed via the Trimble signing service; the warehouse variant is the same unsigned build you submit to EW (EW signs its own copy after review):
+Attach the `.rbz` (see [§3](#3-build-artifacts)) plus the Python wheel/sdist. The `.rbz` must already be self-signed via the [Trimble signing service](https://extensions.sketchup.com/developer/sign-extension) — an unsigned extension is flagged as unidentified, and SketchUp blocks it outright under the stricter loading policies:
 
 ```bash
 git tag vX.Y.Z -m "Release X.Y.Z" && git push origin vX.Y.Z
@@ -116,231 +108,11 @@ gh release create vX.Y.Z \
   --notes "..." \
   dist/sketchup_mcp2-X.Y.Z-py3-none-any.whl \
   dist/sketchup_mcp2-X.Y.Z.tar.gz \
-  mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z-github.rbz \
-  mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z-warehouse.rbz
+  mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z.rbz
 ```
-
-## 7. Extension Warehouse submission (optional, ~2–3 day review)
-
-Submitting to SketchUp Extension Warehouse (EW) is an **independent, optional** flow on top of steps 0–6. It only makes sense for major / first releases — EW review takes 2–3 business days per submission, so don't churn it for every patch bump.
-
-The artifact you submit to EW is the **warehouse variant** (`eval_ruby` off by default), uploaded **unsigned** — Trimble/EW signs it themselves after the review. See [Warehouse vs GitHub release](#warehouse-vs-github-release) below for the full two-artifact picture; this section covers the EW-specific submission details. Both `.rbz` variants are gitignored (`*.rbz` in `.gitignore`).
-
-### Build the warehouse `.rbz`
-
-```bash
-(cd mcp_for_sketchup && ruby package.rb --variant=warehouse)
-# → mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z-warehouse.rbz
-```
-
-**Do NOT sign the warehouse `.rbz`.** Upload it **unsigned** through the EW
-intake form; the form's "Encryption Type: Encrypt" setting requests Trimble's
-signing, which happens **after** the 2–3 day review. The two variants take
-different signing paths: only the **github** variant is self-signed by us via
-the Trimble extension-signing service
-(<https://extensions.sketchup.com/developer/sign-extension>) before it goes to
-GitHub Releases (see [Warehouse vs GitHub release](#warehouse-vs-github-release)).
-
-Verify the `.rbz` is well-formed before uploading:
-
-```bash
-python3 -c "
-import zipfile
-z = zipfile.ZipFile('mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z-warehouse.rbz')
-names = sorted(z.namelist())
-print('total=', len(names))
-print('  .rb=',  sum(1 for n in names if n.endswith('.rb')))
-print('root files:', [n for n in names if '/' not in n])
-"
-```
-
-Expected (`total=` 28, `.rb=` 27):
-- 27 `.rb` files: 1 root `mcp_for_sketchup.rb` + 26 inside `mcp_for_sketchup/`. The 26 are the 25 checked-in source files plus the per-build autogenerated `mcp_for_sketchup/core/build_profile.rb` (gitignored; written by `package.rb` at build time and staged into the `.rbz`).
-- 1 `.html` (`mcp_for_sketchup/ui/settings.html`), for 28 files total.
-- Root files: only `['mcp_for_sketchup.rb']`. No `extension.json` at root — the Trimble/EW signing backend rejects "extra files at root" (see commit 839466c). `extension.json` is also **not** required by EW because the loader (`mcp_for_sketchup.rb`) declares all metadata via `Sketchup::Extension.new(...)`.
-
-### EW form values (stable — copy across releases)
-
-Only Version Number, Release Notes, and the Description occasionally change. Everything else is one-time setup.
-
-| Field | Value |
-|---|---|
-| Account / Organization | your personal developer account |
-| Listing Page checkbox | ☐ off (we ship a real Extension, not a marketing page) |
-| Extension Title | **MCP Server for SketchUp** |
-| Extension Summary (≤120 chars) | **Connect Claude (or any MCP-aware AI client) to SketchUp for prompt-driven 3D modeling.** |
-| Categories (≤3) | Developer Tools, Productivity, Woodworking |
-| Version Number | matches the `.rbz` contents (e.g. `0.2.0`) |
-| Encryption Type | **Encrypt** |
-| Mark as NVIDIA CUDA-Enabled | ☐ off |
-| SketchUp Compatibility | 2024, 2025, 2026 (only versions where the plugin has been exercised; 2026 required for `get_viewport_screenshot`) |
-| OS Compatibility | Windows, Mac OS X (Ruby code uses stdlib only — no platform-specific API) |
-| Supported Languages | English |
-| Website | https://github.com/zinin/sketchup-mcp2 |
-| Promo Video | (blank — optional) |
-| Keywords | `mcp`, `claude`, `ai`, `model-context-protocol`, `automation`, `developer-tools`, `llm` (5–7 strong tags) |
-| Description radio | **Markdown** |
-| Upload file | the **unsigned** `mcp_for_sketchup_v<X.Y.Z>-warehouse.rbz` — do NOT self-sign; EW signs it after review (filename irrelevant — EW renames on its side) |
-
-Naming conventions / why:
-- EW dislikes "SketchUp" as the first word of the title. `<X> for SketchUp` is the convention used by most listings.
-- Categories: Developer Tools (it's a dev tool), Productivity (workflow automation), Woodworking (the joinery handlers — `create_mortise_tenon`, `create_dovetail`, `create_finger_joint` — make this surprisingly niche-relevant).
-- Compatibility: list what's been actually tested. Don't claim SU 2023 or below — `Sketchup::Camera#is_2d?` requires 2018+ and `RenderingOptions["RenderMode"]` behavior is not verified on older builds.
-
-### Description template (Markdown, paste verbatim)
-
-```markdown
-# MCP Server for SketchUp
-
-Bridge SketchUp with Claude and other MCP-aware AI clients. Drive 3D modeling, edits, materials, and exports from natural-language prompts via the [Model Context Protocol](https://modelcontextprotocol.io/).
-
-## What it does
-
-This extension runs a local TCP server inside SketchUp that exposes the live model to any AI assistant that speaks MCP. A companion Python package (`sketchup-mcp2` on PyPI) acts as the MCP server your AI client connects to.
-
-**Architecture:** `Claude → Python MCP → TCP socket :9876 → Ruby extension → SketchUp model`
-
-## Features
-
-- **30+ typed tools** for modeling: create components, transforms, booleans (union / difference / intersection), fillet / chamfer, joinery (mortise-tenon, dovetail, finger-joint), materials, layers, selection, exports (skp / obj / dae / stl / png / jpg).
-- **Multi-client TCP server** — N concurrent MCP clients can connect simultaneously; per-client error isolation.
-- **`get_viewport_screenshot`** tool — captures the SketchUp viewport as a PNG (returns an MCP Image; requires SketchUp 2026+).
-- **`sketchup_modeling_strategy`** MCP prompt — teaches your AI assistant project conventions; surfaced in MCP-aware clients' slash menu.
-- **One-time `hello` handshake** with version compatibility check between Python client and Ruby server.
-- **`eval_ruby` escape hatch** — execute arbitrary Ruby for power-user workflows. **Off by default** in the Extension Warehouse build: enabling it requires confirming a security warning (arbitrary code ⇒ full filesystem/network/shell access), and your MCP client shows each call for approval before it runs.
-- **Settings dialog** — Host / Port / Log Level configurable via `Plugins → MCP Server → Settings...` (persisted in SketchUp preferences).
-- **Modular Ruby architecture** — clean `core / handlers / helpers / ui` separation.
-- **Trimble-signed** — appears as "Signed" in Extension Manager.
-
-## Who it's for
-
-- Architects, designers, and woodworkers using SketchUp who want to drive modeling tasks via natural language.
-- Developers building agentic AI workflows that touch 3D / CAD.
-- Anyone exploring AI-assisted design.
-
-## Quickstart
-
-1. **Install this extension**: download the `.rbz`, install via `Window → Extension Manager → Install Extension`, restart SketchUp.
-2. **Start the server** inside SketchUp: `Plugins → MCP Server → Start Server`.
-3. **Run the Python MCP server**: `uvx sketchup-mcp2` (or `pip install sketchup-mcp2` + `python -m sketchup_mcp`).
-4. **Configure your MCP client** (Claude Desktop, Claude Code, etc.) to talk to `sketchup-mcp2`.
-
-Full Quickstart with example client configs: https://github.com/zinin/sketchup-mcp2#quickstart
-
-## Compatibility
-
-- **SketchUp**: 2024+ (full features including `get_viewport_screenshot` require 2026+).
-- **OS**: Windows, macOS.
-- **Python**: 3.10+ (for the companion MCP server).
-- **AI clients**: any MCP-aware client — Claude Desktop, Claude Code, custom MCP clients.
-
-## Source & license
-
-- Source: https://github.com/zinin/sketchup-mcp2
-- License: MIT
-- PyPI: https://pypi.org/project/sketchup-mcp2/
-
-## Security note
-
-By default the TCP server binds to `127.0.0.1` (loopback only). If you bind it to `0.0.0.0` for cross-machine use, the MCP server — including `eval_ruby` (arbitrary Ruby execution) — is exposed to the entire local network with **no authentication**. Use only on trusted networks.
-```
-
-### Testing Instructions template (≤1000 chars, paste verbatim)
-
-Critical: moderators don't run a Python MCP client. Keep this 100% verifiable inside SketchUp — anything that requires extra installs risks rejection because the moderator couldn't reproduce.
-
-```text
-Quick in-SketchUp test (no external client or Python needed):
-
-1. Install the .rbz: Window → Extension Manager → Install Extension; restart SketchUp.
-2. Menu: "Plugins → MCP Server" shows Start Server, Stop Server, Restart Server, Settings..., Show Log.
-3. Settings: click Settings... — a dialog opens (Host=127.0.0.1, Port=9876, Log Level=WARN). Change Port to 9877 and Log Level to INFO, Save — closes without errors. Reopen: values persist.
-4. Start: "Plugins → MCP Server → Start Server". Ruby Console (Window → Ruby Console) shows a line ending "[MCPforSU] [INFO] tool=application status=started host=127.0.0.1 port=9877". Repeated Start Server is idempotent.
-5. Stop: "Plugins → MCP Server → Stop Server". Stops cleanly.
-
-Local TCP server (loopback only — no firewall prompt) awaiting MCP-aware AI clients (e.g. Claude). Steps 1-5 cover the in-SketchUp surface; no external service or login required.
-
-License: MIT. Source: https://github.com/zinin/sketchup-mcp2
-```
-
-### Release Notes template (≤1000 chars)
-
-```text
-v<X.Y.Z> — <one-line summary>
-
-<2–3 line overview of what's new at the SketchUp-plugin layer specifically (multi-client, signing, new menu items, etc.) — see the GitHub release for the full PyPI/Python-side changelog>.
-
-Features highlighted on EW (keep ≤ a screenful):
-- <feature 1>
-- <feature 2>
-
-Companion Python package: `uvx sketchup-mcp2`
-PyPI: https://pypi.org/project/sketchup-mcp2/<X.Y.Z>/
-Source: https://github.com/zinin/sketchup-mcp2
-```
-
-### Screenshots
-
-EW requires ≥1 screenshot. Recommended 940×470 px, `.jpg`/`.png`, max 3 MB, up to 5 images.
-
-For this backend-only extension (no own viewport), useful captures — all takeable inside SketchUp in <1 min each, no video recording needed:
-
-1. **Settings dialog** — `Plugins → MCP Server → Settings...` shows the only HTML UI surface (3 fields). Take with Snipping Tool / Cmd+Shift+4.
-2. **`Plugins → MCP Server` menu expanded** — shows the Start Server / Stop Server / Restart Server / Settings... / Show Log menu items. Proves SketchUp integration.
-3. **Ruby Console after Start** — set Log Level to `INFO` in Settings first (the default is `WARN`, which suppresses the start line), then `Window → Ruby Console` and `Plugins → MCP Server → Start Server`. Capture the `[<UTC iso8601>] [MCPforSU] [INFO] tool=application status=started host=127.0.0.1 port=9876` line.
-
-Optional 4th (marketing hero shot): Claude Code or Claude Desktop + SketchUp viewport in split-screen with a Claude-driven build visible. ~10–15 min to set up if Claude isn't already configured against the running server.
-
-### Submit and what happens next
-
-Click **Submit for Review**. EW reviews in 2–3 business days.
-
-- EW renames your uploaded file on its side (typically to `<extension_id>_<version>.rbz`) — the upload filename doesn't surface to end users.
-- The catalog serves the warehouse variant (`eval_ruby` off by default); the GitHub Releases page additionally offers the github variant (`eval_ruby` on) for power users. Both end up signed, but via different paths: the github build is self-signed by us via the Trimble signing service before GitHub upload, while the warehouse build is signed by Trimble after the EW review.
 
 ## Notes
 
 - `LICENSE` and `NOTICE` ship inside the wheel via `license-files` in `pyproject.toml` — no manual copying needed.
 - After the first publish, swap the account-wide PyPI tokens in `~/.pypirc` for **project-scoped** ones (PyPI → Settings → API tokens → Scope: `Project: sketchup-mcp2`). Compromise of a scoped token only affects that project.
-
-## Warehouse vs GitHub release
-
-Two artifacts ship from the same source commit:
-
-- `mcp_for_sketchup_vX.Y.Z-warehouse.rbz` — submitted to Trimble Extension
-  Warehouse via their intake form. `product_id` is `MCP_FOR_SKETCHUP`
-  (different from the dead v0.1.0 listing that ran under the prior
-  `su_`-prefixed product id). Eval disabled by default.
-- `mcp_for_sketchup_vX.Y.Z-github.rbz` — uploaded to the GitHub
-  Releases page along with the Python wheel/sdist. Eval enabled by
-  default. README links to it as the dev/power-user variant.
-
-Both end up signed, but via different paths: the github build is self-signed by
-us via the Trimble signing service before GitHub upload, while the warehouse
-build is signed by Trimble after the EW review.
-
-### Submitting via Extension Warehouse (v0.2.0+)
-
-1. Build the warehouse variant: `(cd mcp_for_sketchup && ruby package.rb --variant=warehouse)`
-2. Upload it **UNSIGNED** through the Extension Warehouse intake form — do NOT
-   pre-sign. Set "Encryption Type: Encrypt" (see [§7](#7-extension-warehouse-submission-optional-23-day-review)
-   for the form values) so Trimble signs it; the signing happens after the 2–3
-   day review.
-3. `product_id` is `MCP_FOR_SKETCHUP` — this is a NEW product, not an
-   update to the dead v0.1.0 listing under the prior `su_`-prefixed
-   product id.
-
-For the GitHub-Release variant, build with `--variant=github`, self-sign it
-yourself via the Trimble extension-signing service
-(<https://extensions.sketchup.com/developer/sign-extension>), and upload the
-**signed** `.rbz` to GitHub Releases alongside the Python wheel/sdist.
-
-Release notes template (GitHub Releases):
-
-> ## v0.2.0 — Warehouse-compliant rebrand
->
-> Two `.rbz` artifacts: warehouse (eval gated, for Trimble Extension Warehouse)
-> and github (eval enabled, for power users). The github build is Trimble-signed.
->
-> **Wire-protocol break** — old v0.1.0 .rbz cannot handshake with the new
-> Python client and vice versa. Upgrade both halves.
+- **The Extension Warehouse is not a distribution channel for this project.** Trimble denied the v0.2.0 submission in August 2026 on policy grounds, not on fixable defects: they publish no externally developed MCP servers, reserving the catalogue for tools they build and secure themselves. Do not spend another two-month review cycle on it. GitHub Releases is the only channel — the `.rbz` still goes through the [Trimble signing service](https://extensions.sketchup.com/developer/sign-extension), which is a separate, self-serve flow with no review.
