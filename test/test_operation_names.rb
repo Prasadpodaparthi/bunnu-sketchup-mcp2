@@ -1,9 +1,9 @@
 # test/test_operation_names.rb
 # Source-level guards against regressing the Undo-menu labels back to
-# snake_case identifiers. The reviewer's warehouse rejection (note 1)
-# requires Title Case strings here because they are user-visible in
-# SketchUp's Edit → Undo / Redo menu. These tests parse the handler
-# files directly to avoid stubbing the entire Sketchup::Model API.
+# snake_case identifiers. Title Case is required here because these
+# strings are user-visible in SketchUp's Edit → Undo / Redo menu. These
+# tests parse the handler files directly to avoid stubbing the entire
+# Sketchup::Model API.
 require "minitest/autorun"
 
 class TestOperationNames < Minitest::Test
@@ -78,8 +78,8 @@ class TestOperationNames < Minitest::Test
   def test_no_snake_case_op_labels_remain
     # Catch-all regression guard. The pattern matches a start_operation call
     # whose first arg literal begins with a lowercase letter (i.e. snake_case)
-    # OR contains a colon-separator like "boolean_operation:union". Both
-    # were the form reviewer rejected.
+    # OR contains a colon-separator like "boolean_operation:union". Both are
+    # forms this file exists to keep out of the Undo menu.
     Dir[File.join(HANDLERS, "*.rb")].each do |path|
       File.read(path).scan(/start_operation\("([^"]+)"/).each do |(literal_arg)|
         # Allow interpolation marker `#{...}` anywhere; check the static

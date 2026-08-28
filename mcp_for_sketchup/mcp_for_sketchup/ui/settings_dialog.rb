@@ -217,7 +217,7 @@ module MCPforSketchUp
           # The dialog may already be closing; nothing more we can do, but make
           # the swallowed failure diagnosable (DEBUG, suppressed by default)
           # instead of truly silent — consistent with the no-silent-rescues
-          # convention (warehouse reject note).
+          # convention.
           MCPforSketchUp::Core::Logger.log("DEBUG",
             "settings_dialog.report_general_error: secondary execute_script " \
             "failed: #{e.class}: #{e.message}")

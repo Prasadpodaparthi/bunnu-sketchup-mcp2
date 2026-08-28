@@ -6,7 +6,6 @@ module MCPforSketchUp
     module Logger
       # User-visible identifier prepended to every log line so multiple
       # extensions sharing the SketchUp Ruby console can be distinguished.
-      # Required by warehouse reviewer note 2.
       LINE_PREFIX = "[MCPforSU]".freeze
 
       def self.log(level, msg)
@@ -61,7 +60,7 @@ module MCPforSketchUp
         # failure ONCE per failure episode via a DIRECT console write — not via
         # Logger.log (which would re-enter append_to_file while log_to_file is on
         # → infinite recursion) and not once-per-line (an unwritable path must
-        # not flood the shared console — the very clutter reject #2 was about).
+        # not flood the console every other extension shares).
         # The flag re-arms on the next successful write. WARN regardless of level
         # because the user explicitly enabled log-to-file and lines are now lost.
         return if @log_file_write_failed
