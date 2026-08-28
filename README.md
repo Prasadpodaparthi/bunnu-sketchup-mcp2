@@ -21,7 +21,7 @@ gem install --user-install rubyzip
 # → mcp_for_sketchup/mcp_for_sketchup_v<version>.rbz
 ```
 
-In SketchUp: `Window → Extension Manager → Install Extension`, pick the `.rbz`, restart SketchUp.
+In SketchUp: `Window → Extension Manager → Install Extension`, pick the `.rbz`, restart SketchUp. The plugin ships with `eval_ruby` — arbitrary Ruby execution inside SketchUp — **enabled by default**; uncheck **Enable Ruby evaluation** in `Plugins → MCP Server → Settings...` to close the gate.
 
 ### 2. Start the server inside SketchUp
 

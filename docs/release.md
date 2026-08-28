@@ -46,7 +46,7 @@ If HEAD has diverged from `origin/master`, decide **rebase** vs **merge** before
 * `test_max_ruby_matches_python_version` (Python) — Python's view of Ruby max must equal current `CLIENT_VERSION` at release time.
 * `test_max_python_matches_server_version` (Ruby) — Ruby's view of Python max must equal plugin `SERVER_VERSION` at release time.
 
-**Contract break — floors bumped in v0.3.0 (2026-07-02; batches 1+2, branch `fix/deep-review-p2`):** `transform_component.position` switched from a relative offset to an absolute bbox-min target (`feat!`, commit `6b7d133`): an old/new client–server mix would pass the handshake but silently misplace geometry. Batch 2 widened the same break — new tool parameters (`name`, `limit`/`offset`/`response_format`), stricter validation (min dimensions 0.1 mm for cube / 1.0 mm for curved types, dovetail angle ≤ 60°, non-zero scale), and changed response shapes (`list/find_components` pagination envelope, `bbox_mm: null` for empty bounds, screenshot metadata block, `export` warning field). v0.3.0 bumps **both MIN floors to `0.3.0`** (`MIN_RUBY` Python-side, `MIN_PYTHON` Ruby-side) — from that release the handshake was exact-match `0.3.0`↔`0.3.0`, so an incompatible mix is rejected at the handshake instead of silently misbehaving. Call out the new semantics in the GitHub release notes. `0.3.1` is packaging and copy only, so the floors stay at `0.3.0` and the supported range is `0.3.0..0.3.1` on both sides.
+**Contract break — floors bumped in v0.3.0 (2026-07-02; batches 1+2, branch `fix/deep-review-p2`):** `transform_component.position` switched from a relative offset to an absolute bbox-min target (`feat!`, commit `6b7d133`): an old/new client–server mix would pass the handshake but silently misplace geometry. Batch 2 widened the same break — new tool parameters (`name`, `limit`/`offset`/`response_format`), stricter validation (min dimensions 0.1 mm for cube / 1.0 mm for curved types, dovetail angle ≤ 60°, non-zero scale), and changed response shapes (`list/find_components` pagination envelope, `bbox_mm: null` for empty bounds, screenshot metadata block, `export` warning field). v0.3.0 bumps **both MIN floors to `0.3.0`** (`MIN_RUBY` Python-side, `MIN_PYTHON` Ruby-side) — from that release the handshake was exact-match `0.3.0`↔`0.3.0`, so an incompatible mix is rejected at the handshake instead of silently misbehaving. Call out the new semantics in the GitHub release notes. `0.3.1` is packaging and copy only, so neither floor moved and both 0.3.1 artifacts declare `0.3.0..0.3.1` — but that does not make a mixed pair work: each side's `MAX_*` tracks its own release, so an installed 0.3.0 plugin rejects a 0.3.1 client at the handshake, and a 0.3.0 client rejects a 0.3.1 plugin. Ship the Python package and the `.rbz` as a pair.
 
 Run `uv lock` to refresh `uv.lock` with the new project version (otherwise the next `uv` call updates it post-release and you end up with a stray `chore: sync uv.lock` commit). Commit (`chore: bump to vX.Y.Z`) and push.
 
@@ -99,7 +99,7 @@ uvx twine upload dist/*
 
 ## 6. Git tag + GitHub Release
 
-Attach the `.rbz` (see [§3](#3-build-artifacts)) plus the Python wheel/sdist. The `.rbz` must already be self-signed via the [Trimble signing service](https://extensions.sketchup.com/developer/sign-extension) — an unsigned extension is flagged as unidentified, and SketchUp blocks it outright under the stricter loading policies:
+Attach the `.rbz` (see [§3](#3-build-artifacts)) plus the Python wheel/sdist. The `.rbz` must already be self-signed via the [Trimble signing service](https://extensions.sketchup.com/developer/sign-extension) — an unsigned extension is flagged as unidentified, and SketchUp blocks it outright under the strictest loading policy (*Identified Extensions Only*):
 
 ```bash
 git tag vX.Y.Z -m "Release X.Y.Z" && git push origin vX.Y.Z
@@ -110,6 +110,18 @@ gh release create vX.Y.Z \
   dist/sketchup_mcp2-X.Y.Z.tar.gz \
   mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z.rbz
 ```
+
+Release notes must call out anything a user upgrading in place would otherwise
+discover the hard way. For `0.3.1`:
+
+- `eval_ruby` now ships **enabled by default**; close the gate by unchecking
+  **Enable Ruby evaluation** in `Plugins → MCP Server → Settings...`.
+- Upgrading over an installation where the user had explicitly disabled
+  `eval_ruby` leaves it disabled — the stored preference outranks the new
+  default. Intended behaviour; say so, or it reads as a bug.
+- The Python package and the `.rbz` must be upgraded **together**: an installed
+  0.3.0 plugin rejects a 0.3.1 client at the handshake (`-32001`), and a 0.3.0
+  client rejects a 0.3.1 plugin (see [§1](#1-bump-version-in-6-places-must-match)).
 
 ## Notes
 

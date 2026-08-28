@@ -15,8 +15,11 @@ from sketchup_mcp.errors import IncompatibleVersionError
 # that breaks wire/handler contract with the previous counterpart.
 # 0.3.0 moved both floors on the batch-1+2 handler-contract break (absolute
 # transform position, stricter validation, changed response shapes). 0.3.1 is
-# packaging and copy only, so the floors stay at 0.3.0 and the supported range
-# is 0.3.0..0.3.1 on both sides — see docs/release.md.
+# packaging and copy only, so neither floor moved and both 0.3.1 artifacts
+# declare 0.3.0..0.3.1. That does NOT make a mixed pair work: each side's MAX_*
+# tracks its own release, so an installed 0.3.0 plugin rejects a 0.3.1 client at
+# the handshake, and a 0.3.0 client rejects a 0.3.1 plugin. The Python package
+# and the .rbz are upgraded together — see docs/release.md.
 MIN_RUBY = "0.3.0"
 MAX_RUBY = "0.3.1"
 

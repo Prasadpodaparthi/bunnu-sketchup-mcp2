@@ -16,7 +16,7 @@ begin
   # .rbz must contain exactly one root .rb (the loader) + a same-named
   # directory (the extension subfolder); the Trimble signing service rejects
   # anything else at root with "Extra files found." The loader declares all
-  # extension metadata via Sketchup::Extension.new, so nothing else is needed.
+  # extension metadata via SketchupExtension.new, so nothing else is needed.
   # Guarded at test time by test/test_package_output.rb.
   FileUtils.cp_r(EXTENSION_NAME, temp_dir)
   FileUtils.cp("#{EXTENSION_NAME}.rb", temp_dir)
