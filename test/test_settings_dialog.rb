@@ -83,19 +83,13 @@ end
 # load_state_payload is a pure data-builder (no UI::HtmlDialog dependency),
 # so it is unit-testable. It reads Config + Application state. The key
 # guarantee (iter-1 CRITICAL-2): :eval_enabled is sourced from the
-# `eval_enabled?` predicate, NOT the raw accessor — so a sentinel-nil
-# unset pref resolves to the effective `false`, never leaks `nil` to the UI.
+# `eval_enabled?` predicate, NOT the raw accessor — so an unread pref
+# resolves to the effective default, never leaking `nil` to the UI.
 class TestSettingsDialogLoadStatePayload < Minitest::Test
   S = MCPforSketchUp::UI::SettingsDialog
 
   def setup
     ConfigReset.reset_all!
-    # Order-independence: ensure no BuildProfile lingers from another test
-    # file in the same run_all.rb process, so eval_enabled? falls through to
-    # the safe warehouse default of `false`.
-    if MCPforSketchUp::Core.const_defined?(:BuildProfile)
-      MCPforSketchUp::Core.send(:remove_const, :BuildProfile)
-    end
     MCPforSketchUp::Core::Config.host         = "127.0.0.1"
     MCPforSketchUp::Core::Config.port         = 9876
     MCPforSketchUp::Core::Config.log_level    = "INFO"
@@ -105,18 +99,18 @@ class TestSettingsDialogLoadStatePayload < Minitest::Test
     ConfigReset.reset_all!
   end
 
-  # CRITICAL-2 predicate: unset pref (nil) + no BuildProfile => effective
-  # false, never nil. Proves load_state_payload uses eval_enabled?, not the
-  # raw `eval_enabled` accessor (which would be nil here).
-  def test_eval_enabled_is_effective_false_not_nil_when_unset
+  # Предикатная гарантия (iter-1 CRITICAL-2): :eval_enabled в payload берётся
+  # из `eval_enabled?`, а не из сырого аксессора — не прочитанный pref обязан
+  # прийти в UI как эффективное булево, иначе чекбокс останется в
+  # неопределённом состоянии.
+  def test_eval_enabled_is_effective_default_not_nil_when_unset
     assert_nil MCPforSketchUp::Core::Config.eval_enabled,
-               "precondition: raw accessor should be nil (sentinel-unset)"
-    refute MCPforSketchUp::Core.const_defined?(:BuildProfile),
-           "precondition: no BuildProfile loaded"
+               "precondition: raw accessor should be nil (nothing loaded yet)"
 
     payload = S.load_state_payload
-    assert_equal false, payload[:eval_enabled],
-                 "must be effective `false` (eval_enabled?), not the raw nil accessor"
+    assert_equal MCPforSketchUp::Core::Config::DEFAULTS[:eval_enabled],
+                 payload[:eval_enabled],
+                 "must be the effective default (eval_enabled?), not the raw nil accessor"
     refute_nil payload[:eval_enabled]
   end
 
@@ -215,11 +209,6 @@ class TestSettingsDialogOnSaveEvalConfirm < Minitest::Test
 
   def setup
     ConfigReset.reset_all!
-    # No BuildProfile lingering from another file in the same run_all process,
-    # so eval_enabled? resolves purely from the explicit pref we set here.
-    if MCPforSketchUp::Core.const_defined?(:BuildProfile)
-      MCPforSketchUp::Core.send(:remove_const, :BuildProfile)
-    end
     C.host          = "127.0.0.1"
     C.port          = 9876
     C.log_level     = "INFO"

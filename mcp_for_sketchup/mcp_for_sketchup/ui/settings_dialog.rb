@@ -64,8 +64,8 @@ module MCPforSketchUp
           log_level:      MCPforSketchUp::Core::Config.log_level,
           log_to_file:    MCPforSketchUp::Core::Config.log_to_file,
           log_file_path:  MCPforSketchUp::Core::Config.log_file_path,
-          # Use eval_enabled? (not raw accessor) so sentinel-nil unset state
-          # falls through to BuildProfile::EVAL_ENABLED_BY_DEFAULT — iter-1 CRITICAL-2.
+          # Use eval_enabled? (not the raw accessor) so an unread pref resolves
+          # to the shipped default instead of leaking nil — iter-1 CRITICAL-2.
           eval_enabled:   MCPforSketchUp::Core::Config.eval_enabled?,
           running:        MCPforSketchUp::Core::Application.running?,
           current:        MCPforSketchUp::Core::Application.running_config,
@@ -93,8 +93,8 @@ module MCPforSketchUp
 
         normalized = result[:normalized]
         current_runtime = MCPforSketchUp::Core::Application.running_config
-        # Effective previous state — uses `eval_enabled?` so a sentinel-nil
-        # unset pref properly resolves through BuildProfile (iter-1 CRITICAL-2).
+        # Effective previous state — uses `eval_enabled?` so an unread pref
+        # resolves to the shipped default (iter-1 CRITICAL-2).
         previous_eval_enabled = MCPforSketchUp::Core::Config.eval_enabled?
 
         # Eval transition off → on requires a blocking confirm with a security

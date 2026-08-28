@@ -215,13 +215,12 @@ class TestConfig < Minitest::Test
     refute C.eval_enabled?, "eval gate must remain closed after a failed save"
   end
 
-  # --- new prefs introduced in v0.2.0 (warehouse compliance) ---
+  # --- prefs introduced in v0.2.0 ---
 
-  def test_defaults_include_eval_enabled_nil
-    # Sentinel-nil: unset pref triggers the BuildProfile fallback (spec §4.2).
-    # `false` here would mask the fallback and make github-variant indistinguishable
-    # from warehouse — see iter-1 CRITICAL-1.
-    assert_nil C::DEFAULTS[:eval_enabled]
+  def test_defaults_include_eval_enabled_true
+    # Единственная сборка ⇒ обычное значение вместо sentinel-nil. eval
+    # поставляется открытым, пользователь выключает его в Settings.
+    assert_equal true, C::DEFAULTS[:eval_enabled]
   end
 
   def test_defaults_include_log_to_file_false
@@ -252,14 +251,13 @@ class TestConfig < Minitest::Test
     assert_equal "/tmp/custom.log", C.log_file_path
   end
 
-  def test_eval_enabled_question_mark_when_build_profile_absent_returns_false
-    # Unset pref + no BuildProfile => safe warehouse default (false).
-    refute MCPforSketchUp::Core.const_defined?(:BuildProfile),
-      "test env should not have build_profile.rb loaded"
+  def test_eval_enabled_question_mark_when_pref_unset_returns_default
+    # Отсутствующий pref ⇒ read_default отдаёт DEFAULTS[:eval_enabled],
+    # то есть открытый гейт. Sentinel-nil больше не переживает загрузку.
     C.load_from_defaults!(StubReader.new)  # no eval_enabled key in reader
-    assert_nil C.eval_enabled,
-      "sentinel: unset pref must leave @eval_enabled at nil"
-    refute C.eval_enabled?
+    assert_equal true, C.eval_enabled,
+      "an absent pref must resolve to the DEFAULTS value, not a sentinel"
+    assert C.eval_enabled?
   end
 
   def test_eval_enabled_question_mark_when_pref_true
@@ -268,7 +266,7 @@ class TestConfig < Minitest::Test
   end
 
   def test_eval_enabled_question_mark_when_pref_explicit_false
-    # Explicit `false` must be honoured (not fall through to BuildProfile).
+    # Explicit `false` must be honoured (not resolved to the open default).
     C.load_from_defaults!(StubReader.new("eval_enabled" => false))
     assert_equal false, C.eval_enabled,
       "explicit false must be preserved, not coerced to nil"
@@ -359,9 +357,8 @@ class TestConfig < Minitest::Test
     # Security (codex 6th-review): a persisted eval_enabled that is NOT a native
     # boolean (tampered or legacy string "true"/"false", an integer, etc.) must
     # fail CLOSED. A present-but-invalid value is NOT «unset»: coerce_bool_pref
-    # resolves it to `false` (default: false), NOT the nil sentinel — otherwise
-    # it would fall through to BuildProfile, which in the github variant bakes
-    # EVAL_ENABLED_BY_DEFAULT=true and would silently RE-OPEN the gate. A naive
+    # resolves it to `false` (default: false), never to the open DEFAULTS value —
+    # a corrupt pref is no basis for enabling arbitrary code execution. A naive
     # `!!raw` would be worse still (the string "false" → true). (log_level ERROR
     # keeps the coercion WARN out of the shared test output when Logger is loaded.)
     ["true", "false", "yes", "1", 1].each do |bad|
@@ -371,65 +368,6 @@ class TestConfig < Minitest::Test
         "non-boolean eval_enabled #{bad.inspect} must fail closed to false"
       refute C.eval_enabled?,
         "eval gate must stay closed for non-boolean pref #{bad.inspect}"
-    end
-  end
-
-  def test_eval_enabled_question_mark_build_profile_fails_closed_for_non_boolean
-    # Security hardening (codex 4th-review review): the build-time gate must fail
-    # CLOSED for a malformed build_profile.rb. `!!X` would be WRONG — `!!"false"`
-    # and `!!1` are both `true` in Ruby and would OPEN the gate, exactly the trap
-    # coerce_bool_pref guards against on the runtime-pref path. eval_enabled?
-    # therefore accepts ONLY a literal `true`; every other baked value (Integer,
-    # the string "false"/"true", …) resolves to a closed gate.
-    # @eval_enabled must be nil so the BuildProfile fallback branch is exercised.
-    C.eval_enabled = nil
-    refute MCPforSketchUp::Core.const_defined?(:BuildProfile, false),
-      "precondition: test env has no build_profile.rb loaded"
-
-    # baked build-profile value => expected effective gate state
-    {
-      true    => true,    # only a literal true enables eval
-      false   => false,
-      1       => false,   # truthy non-boolean must NOT open the gate
-      "false" => false,   # the classic !! trap: !!"false" == true
-      "true"  => false,
-      "yes"   => false,
-    }.each do |baked, expected|
-      MCPforSketchUp::Core.const_set(:BuildProfile, Module.new)
-      begin
-        MCPforSketchUp::Core::BuildProfile.const_set(:EVAL_ENABLED_BY_DEFAULT, baked)
-        assert_equal expected, C.eval_enabled?,
-          "build-profile EVAL_ENABLED_BY_DEFAULT=#{baked.inspect} must resolve to #{expected} (gate fail-closed)"
-      ensure
-        MCPforSketchUp::Core.send(:remove_const, :BuildProfile)
-      end
-    end
-  end
-
-  def test_non_boolean_eval_pref_fails_closed_even_when_build_default_is_true
-    # Regression (codex 6th-review): the github variant bakes
-    # EVAL_ENABLED_BY_DEFAULT=true. A present-but-non-boolean (tampered/corrupt)
-    # eval_enabled pref must NOT be treated as «unset» and fall through to that
-    # truthy build default — that would silently RE-OPEN the arbitrary-code gate.
-    # With default: false, load_from_defaults! resolves present-but-invalid to
-    # `false`, so the gate stays CLOSED here even though the build default is
-    # true. This is the github-build scenario that
-    # test_load_from_defaults_coerces_non_boolean_eval_enabled_to_false cannot
-    # observe (the test env has no BuildProfile ⇒ false). The pre-fix code
-    # (default: nil) would FAIL this test.
-    refute MCPforSketchUp::Core.const_defined?(:BuildProfile, false),
-      "precondition: test env has no build_profile.rb loaded"
-    ["false", "true", "yes", "1", 1].each do |bad|
-      ConfigReset.reset_all!
-      C.load_from_defaults!(StubReader.new("eval_enabled" => bad, "log_level" => "ERROR"))
-      MCPforSketchUp::Core.const_set(:BuildProfile, Module.new)
-      begin
-        MCPforSketchUp::Core::BuildProfile.const_set(:EVAL_ENABLED_BY_DEFAULT, true)
-        refute C.eval_enabled?,
-          "github build default=true must NOT re-open the gate for non-boolean pref #{bad.inspect}"
-      ensure
-        MCPforSketchUp::Core.send(:remove_const, :BuildProfile)
-      end
     end
   end
 end
