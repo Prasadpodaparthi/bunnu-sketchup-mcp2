@@ -64,7 +64,7 @@ def test_too_old_raises_with_reinstall_hint(monkeypatch):
         compat.check_ruby_version("0.0.3")
     msg = str(exc.value)
     assert "0.0.3" in msg and "too old" in msg
-    assert ".rbz" in msg  # reinstall hint
+    assert "mcp_for_sketchup_v0.2.0.rbz" in msg  # names the one artifact we ship
     assert "get_version" in msg  # diagnostic pointer
 
 
@@ -84,7 +84,7 @@ def test_none_raises_with_pre_dates_hint():
         compat.check_ruby_version(None)
     msg = str(exc.value)
     assert "pre-dates" in msg
-    assert ".rbz" in msg
+    assert f"mcp_for_sketchup_v{compat.MAX_RUBY}.rbz" in msg
     assert "get_version" in msg
 
 
