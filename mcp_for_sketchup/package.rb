@@ -3,7 +3,7 @@ require 'zip'
 require 'fileutils'
 
 EXTENSION_NAME = 'mcp_for_sketchup'
-VERSION = '0.3.0'
+VERSION = '0.3.1'
 
 OUTPUT_NAME = "#{EXTENSION_NAME}_v#{VERSION}.rbz"
 
