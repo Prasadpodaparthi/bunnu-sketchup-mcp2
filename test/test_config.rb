@@ -273,14 +273,18 @@ class TestConfig < Minitest::Test
     refute C.eval_enabled?
   end
 
-  def test_read_default_sentinel_round_trip_for_eval_enabled
-    # StubReader contract mirror of Sketchup.read_default: when key is absent,
-    # returns the default arg (nil sentinel); when key is `false`, returns `false`.
-    # Verifies the assumption underlying CRITICAL-1's sentinel design (spec §4.2).
+  def test_stub_reader_stored_false_beats_default
+    # StubReader contract mirror of Sketchup.read_default: when the key is
+    # absent it returns the default argument; when the key holds `false` it
+    # returns `false`. Pins the assumption load_from_defaults! actually makes —
+    # it passes DEFAULTS[:eval_enabled] (open) as the default, so a stored
+    # `false` must win over it rather than resolving to the open default.
     reader_unset = StubReader.new                                   # no key
     reader_false = StubReader.new("eval_enabled" => false)
-    assert_nil   reader_unset.read_default(C::SECTION, "eval_enabled", nil)
-    assert_equal false, reader_false.read_default(C::SECTION, "eval_enabled", nil)
+    assert_equal C::DEFAULTS[:eval_enabled],
+      reader_unset.read_default(C::SECTION, "eval_enabled", C::DEFAULTS[:eval_enabled])
+    assert_equal false,
+      reader_false.read_default(C::SECTION, "eval_enabled", C::DEFAULTS[:eval_enabled])
   end
 
   def test_update_with_only_3_args_does_not_touch_new_fields

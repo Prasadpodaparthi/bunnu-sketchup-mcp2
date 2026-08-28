@@ -8,7 +8,6 @@ require "minitest/autorun"
 
 class TestOperationNames < Minitest::Test
   HANDLERS = File.expand_path("../mcp_for_sketchup/mcp_for_sketchup/handlers", __dir__)
-  CORE     = File.expand_path("../mcp_for_sketchup/mcp_for_sketchup/core", __dir__)
 
   def source(rel_dir, file)
     File.read(File.join(rel_dir, file))
