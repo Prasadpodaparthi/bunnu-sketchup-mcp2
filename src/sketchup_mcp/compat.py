@@ -69,9 +69,19 @@ def check_ruby_version(server_version: str | None) -> None:
 
 
 def _msg_ruby_too_old(rv: str) -> str:
+    # Names MAX_RUBY alone, never the MIN..MAX range. The range is what THIS
+    # side accepts; printed to a human it reads as "any of these will work",
+    # and none but MAX will. test_max_ruby_matches_python_version pins
+    # MAX_RUBY to CLIENT_VERSION and test_max_python_matches_server_version
+    # mirrors it on the Ruby side, so a pair connects only when both versions
+    # are equal — a reader who installed MIN_RUBY from this text would land on
+    # a plugin the handshake still rejects, from the other side. MIN_RUBY stays
+    # where it is: it records that the contract last broke in 0.3.0, and it
+    # regains meaning the day those pinning tests are relaxed. Restore the
+    # range here if that happens.
     return (
         f"SketchUp plugin v{rv} is too old for sketchup-mcp2 v{CLIENT_VERSION} "
-        f"(requires v{MIN_RUBY}..v{MAX_RUBY}). "
+        f"(which works only with plugin v{MAX_RUBY}). "
         f"Reinstall mcp_for_sketchup_v{MAX_RUBY}.rbz from the GitHub release. "
         f"Call `get_version` to inspect handshake state."
     )
