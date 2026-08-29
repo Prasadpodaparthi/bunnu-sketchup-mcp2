@@ -32,6 +32,26 @@ class TestPackageOutput < Minitest::Test
         assert_equal ["mcp_for_sketchup", "mcp_for_sketchup.rb"], roots,
           "archive root must hold only the loader and its same-named folder; got #{roots.inspect}"
 
+        # Содержимое, а не только корень. package.rb делает cp_r ВСЕЙ подпапки,
+        # поэтому посторонний файл внутри неё уезжает в подписываемый артефакт
+        # молча — корневой ассерт выше этого не видит. Ручная сверка содержимого
+        # (§7 docs/release.md) снята вместе с warehouse-процедурой, так что это
+        # единственное, что теперь держит инвариант.
+        #
+        # Эталон берём из git, а не с диска: сравнение с диском пропустило бы
+        # ровно тот случай, ради которого проверка и нужна — нетрекнутый
+        # stale-генерат (например, core/build_profile.rb от сборки до 0.3.1)
+        # лежал бы тогда в обоих множествах и сошёлся бы сам с собой.
+        tracked, st = Open3.capture2("git", "ls-files",
+                                     "mcp_for_sketchup", "mcp_for_sketchup.rb")
+        assert st.success?, "git ls-files failed; тест требует git-checkout"
+        expected = tracked.split("\n").sort
+        refute_empty expected, "git ls-files вернул пустой список — не тот каталог?"
+        packaged = zf.entries.reject(&:directory?).map(&:name).sort
+        assert_equal expected, packaged,
+          "архив обязан содержать ровно трекнутое дерево расширения; лишний " \
+          "файл уедет в подписанный .rbz, недостающий сломает загрузку"
+
         loader = zf.find_entry("mcp_for_sketchup.rb")
         refute_nil loader, "loader mcp_for_sketchup.rb missing from #{files.first}"
         body = loader.get_input_stream.read

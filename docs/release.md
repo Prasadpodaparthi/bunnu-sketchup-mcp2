@@ -40,7 +40,7 @@ If HEAD has diverged from `origin/master`, decide **rebase** vs **merge** before
 - `mcp_for_sketchup/mcp_for_sketchup.rb` — `ext.version = 'X.Y.Z'`
 - `mcp_for_sketchup/mcp_for_sketchup/core/compat.rb` — `SERVER_VERSION = "X.Y.Z"` and `MAX_PYTHON = "X.Y.Z"` (and `MIN_PYTHON` only if this release breaks wire/handler contract with the previous Python client)
 
-**MIN/MAX policy:** default to bumping only `MAX_*` to the new release; keep `MIN_*` pointing to the oldest counterpart still supported. Three invariant tests defend against typos and forgotten bumps:
+**MIN/MAX policy:** default to bumping only `MAX_*` to the new release; keep `MIN_*` pointing to the oldest counterpart this side still *accepts at the handshake*. Note that this is unilateral acceptance, not end-to-end interop: because each side's `MAX_*` is pinned to its own version (the two tests below), a pair only works when both versions are equal, whatever the floors say. `MIN_*` therefore controls which side reports the mismatch and what the error text claims — not which pairs can talk. Three invariant tests defend against typos and forgotten bumps:
 
 * `test_min_le_max_invariant` (Python + Ruby) — range cannot be empty.
 * `test_max_ruby_matches_python_version` (Python) — Python's view of Ruby max must equal current `CLIENT_VERSION` at release time.
@@ -119,6 +119,14 @@ discover the hard way. For `0.3.1`:
 - Upgrading over an installation where the user had explicitly disabled
   `eval_ruby` leaves it disabled — the stored preference outranks the new
   default. Intended behaviour; say so, or it reads as a bug.
+- Upgrading over an installation where the user **never opened Settings** does
+  the opposite: with no stored preference the new default applies, so the gate
+  opens. This hits everyone running a `-warehouse` build — published as a
+  release asset for both v0.2.0 and v0.3.0 — where an absent preference
+  previously resolved to *closed* through the build profile. No dialog is
+  shown: `confirm_eval_enable` fires only on an off→on transition inside the
+  Settings dialog, and an upgrade never passes through it. Spell this out; it
+  is the one case a user cannot discover by reading their own settings.
 - The Python package and the `.rbz` must be upgraded **together**: an installed
   0.3.0 plugin rejects a 0.3.1 client at the handshake (`-32001`), and a 0.3.0
   client rejects a 0.3.1 plugin (see [§1](#1-bump-version-in-6-places-must-match)).

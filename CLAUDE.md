@@ -41,9 +41,16 @@ MCP Server for SketchUp bridges Claude AI and SketchUp via the Model Context Pro
   so the LLM repeats it verbatim. Arbitrary-code risk is guarded in two
   layers: (1) a **blocking enable-time security confirm**
   (`ui/settings_dialog.rb::confirm_eval_enable` — warns it grants full
-  filesystem/network/shell access), shown whenever the gate is re-opened
-  after being closed; (2) **per-call review at the MCP client** — Claude
-  Desktop / Claude Code show each `eval_ruby` call's code to approve or deny.
+  filesystem/network/shell access), shown on an off→on transition **inside
+  the Settings dialog** — and only there. An upgrade does not pass through
+  the dialog, so an install with no stored pref (never opened Settings) gets
+  the new open default with no confirm, including one upgrading from a
+  `-warehouse` build where the gate was closed; (2) **per-call review at the
+  MCP client** — Claude Desktop / Claude Code show each `eval_ruby` call's
+  code to approve or deny. Note this second layer is a client convention,
+  not a protocol guarantee: MCP does not mandate an interaction model, and a
+  client running pre-authorized (`--dangerously-skip-permissions`) shows
+  nothing.
   The extension deliberately does NOT log or re-prompt the code — that would
   duplicate the client's permission UI and break autonomous
   (`--dangerously-skip-permissions`) operation.
@@ -79,7 +86,7 @@ uvx sketchup-mcp2             # production-style (from PyPI)
 cd mcp_for_sketchup && ruby package.rb && cd ..
 
 # Unit tests
-ruby test/run_all.rb           # Ruby (minitest; stdlib + rubyzip for the package test) — 416 runs / 1116 assertions
+ruby test/run_all.rb           # Ruby (minitest; stdlib + rubyzip and a git checkout for the package test) — 417 runs / 1124 assertions
 uv run pytest tests/ -q        # Python (pytest) — 177 tests
 
 # Live integration smoke-check (requires SketchUp running + plugin started)

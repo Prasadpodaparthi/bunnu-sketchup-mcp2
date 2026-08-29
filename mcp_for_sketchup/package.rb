@@ -5,6 +5,16 @@ require 'fileutils'
 EXTENSION_NAME = 'mcp_for_sketchup'
 VERSION = '0.3.1'
 
+# There is exactly one build, so there are no options to parse — but silence is
+# the wrong answer to an argument. `package.rb --variant=warehouse` used to
+# produce an eval-DISABLED .rbz; ignoring it now would hand the caller an
+# eval-ENABLED one and exit 0, which is the opposite of what they asked for.
+# A stale release script or muscle memory must fail loudly, not silently invert.
+unless ARGV.empty?
+  abort "package.rb takes no arguments (got #{ARGV.inspect}); build variants " \
+        "were removed in v0.3.1 — there is one .rbz and eval_ruby ships enabled"
+end
+
 OUTPUT_NAME = "#{EXTENSION_NAME}_v#{VERSION}.rbz"
 
 temp_dir = "#{EXTENSION_NAME}_temp"
@@ -26,7 +36,11 @@ begin
   # .rbz: the outer `ensure` below cleans temp_dir but NOT OUTPUT_NAME, and a
   # leftover partial artifact could be shipped by a release glob
   # (gh release upload mcp_for_sketchup/*.rbz). rm_f only ever targets THIS
-  # build's partial output — the rm below already removed any prior .rbz.
+  # build's partial output — the rm below removes only the SAME-NAMED prior
+  # artifact, so a differently-named leftover (e.g. a pre-0.3.1
+  # *-warehouse.rbz) survives the build and is exactly what that release glob
+  # would pick up. `rm -rf mcp_for_sketchup/*.rbz` in docs/release.md §3 is
+  # what clears those; this line is not a substitute for it.
   FileUtils.rm(OUTPUT_NAME) if File.exist?(OUTPUT_NAME)
   begin
     Zip::File.open(OUTPUT_NAME, create: true) do |zipfile|

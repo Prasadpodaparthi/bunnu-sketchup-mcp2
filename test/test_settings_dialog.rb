@@ -309,4 +309,31 @@ class TestSettingsDialogOnSaveEvalConfirm < Minitest::Test
     assert_equal true, C.eval_enabled, "eval stays enabled"
     assert dialog.closed, "the dialog should close after a normal save"
   end
+
+  # Штатный путь поставки 0.3.1: pref не сохраняли ни разу, сырой аксессор nil,
+  # эффективное состояние берётся из DEFAULTS[:eval_enabled]. Перехода off→on
+  # поэтому нет, и блокирующий confirm не показывается — ни на свежей установке,
+  # ни при апгрейде поверх сборки, где гейт был закрыт. Раньше это покрывалось
+  # только для load_state_payload; здесь пиннится сама ветка confirm'а, чтобы
+  # возврат nil-ветки eval_enabled? в fail-closed не прошёл молча.
+  def test_no_confirm_is_shown_when_the_pref_was_never_saved
+    C.eval_enabled = nil    # ничего не загружено ⇒ действует shipped default
+    assert C.eval_enabled?, "precondition: непрочитанный pref обязан дать открытый дефолт"
+    dialog = FakeDialog.new
+
+    confirm_shown = false
+    original = S.method(:confirm_eval_enable)
+    S.define_singleton_method(:confirm_eval_enable) { confirm_shown = true; true }
+    begin
+      S.on_save(dialog, eval_on_payload)
+    ensure
+      S.define_singleton_method(:confirm_eval_enable, original)
+    end
+
+    refute confirm_shown,
+      "несохранённый pref резолвится в открытый дефолт, поэтому сохранение " \
+      "eval=on переходом off→on не является и confirm не показывает"
+    assert_equal true, C.eval_enabled, "гейт остаётся открытым"
+    assert dialog.closed, "the dialog should close after a normal save"
+  end
 end
