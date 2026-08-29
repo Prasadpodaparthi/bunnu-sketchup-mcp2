@@ -99,7 +99,9 @@ uvx twine upload dist/*
 
 ## 6. Git tag + GitHub Release
 
-Attach the `.rbz` (see [§3](#3-build-artifacts)) plus the Python wheel/sdist. The `.rbz` must already be self-signed via the [Trimble signing service](https://extensions.sketchup.com/developer/sign-extension) — an unsigned extension is flagged as unidentified, and SketchUp blocks it outright under the strictest loading policy (*Identified Extensions Only*):
+Attach the `.rbz` (see [§3](#3-build-artifacts)) plus the Python wheel/sdist. The `.rbz` must already be self-signed via the [Trimble signing service](https://extensions.sketchup.com/developer/sign-extension) — an unsigned extension is flagged as unidentified, and SketchUp blocks it outright under the strictest loading policy (*Identified Extensions Only*).
+
+**The service hands back a different file from the one you upload.** It appends a `-signed` suffix to the name and encrypts every `.rb` under the extension folder to `.rbe`, adding `mcp_for_sketchup.susig`; the root loader and `settings.html` stay in the clear, and `main.rb`'s `LOAD_ORDER` names paths without an extension precisely so `Sketchup.require` picks up the `.rbe`. Attach **that** file. The unsuffixed artifact §3 produced is the unsigned one and must not be published:
 
 ```bash
 git tag vX.Y.Z -m "Release X.Y.Z" && git push origin vX.Y.Z
@@ -108,7 +110,7 @@ gh release create vX.Y.Z \
   --notes "..." \
   dist/sketchup_mcp2-X.Y.Z-py3-none-any.whl \
   dist/sketchup_mcp2-X.Y.Z.tar.gz \
-  mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z.rbz
+  mcp_for_sketchup/mcp_for_sketchup_vX.Y.Z-signed.rbz
 ```
 
 Release notes must call out anything a user upgrading in place would otherwise
