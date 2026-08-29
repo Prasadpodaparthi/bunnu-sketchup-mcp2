@@ -165,6 +165,25 @@ module MCPforSketchUp
       # eval_enabled? returns the effective gate state. A pref that has been
       # read wins; `nil` means load_from_defaults! has not run yet — early boot,
       # or a unit test that sets nothing — and the shipped default applies.
+      #
+      # Be aware this REVERSED the failure direction in 0.3.1, and the reversal
+      # is deliberate rather than incidental. Through 0.3.0 the nil branch fell
+      # through to Core::BuildProfile and, with no build profile present (tests,
+      # dev runs), to `false` — the gate failed CLOSED on unknown state. Now it
+      # resolves to DEFAULTS[:eval_enabled], which ships `true`, so the same
+      # branch fails OPEN. Nothing in a loaded plugin reaches it: main.rb:44
+      # loads the modules and main.rb:47 calls load_from_defaults! immediately,
+      # and if that raised, the module body aborts — no menu is installed and
+      # Application never exists to be started. So the reversal is unreachable
+      # in the field, not merely unlikely.
+      #
+      # It stops being unreachable the moment a caller can consult the gate
+      # before prefs are loaded — a server start moved out of main.rb, say. Do
+      # not let that land without deciding this again: the guarantees the gate
+      # actually rests on live elsewhere and are untouched (a corrupt pref fails
+      # closed via coerce_bool_pref(default: false); update! demands a literal
+      # `true`; eval_enabled is persisted last so a partial write cannot leave
+      # it open on disk), but none of them covers this branch.
       def self.eval_enabled?
         return @eval_enabled unless @eval_enabled.nil?
         DEFAULTS[:eval_enabled]
