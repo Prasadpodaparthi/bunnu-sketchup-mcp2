@@ -99,11 +99,11 @@ module MCPforSketchUp
       # — including the empty string and nil — is false. Strict by design:
       # we don't accept "1"/"yes"/"on" forms; the dialog is the only producer.
       # iter-2 SUGGESTION-3: nil normalises to `false` here because the
-      # dialog never sends nil. Semantically a missing pref means «unset»,
-      # not «false» — that distinction matters at the Config layer (sentinel-
-      # nil → BuildProfile fallback) but not in this validator, which only
-      # sees fully-populated dialog payloads. Don't reuse this helper from
-      # Config code.
+      # dialog never sends nil. A payload missing the key is malformed, and
+      # the eval gate fails closed on malformed input — the same rule
+      # Config.load_from_defaults! applies to a corrupt pref. Don't reuse
+      # this helper from Config code, where an ABSENT pref means «take the
+      # shipped default», not «false».
       def self.truthy?(value)
         return value if value == true || value == false
         value.to_s == "true"

@@ -84,7 +84,8 @@ async def test_get_version_incompatible_payload(monkeypatch):
     assert payload["compatible"] is False
     assert payload["ruby_version"] == "0.0.3"
     assert "too old" in payload["error"]
-    assert ".rbz" in payload["error"]
+    # Literal, not f-string: MAX_RUBY is monkeypatched to "1.0.0" above.
+    assert "mcp_for_sketchup_v1.0.0.rbz" in payload["error"]  # names the one artifact we ship
 
 
 @pytest.mark.asyncio

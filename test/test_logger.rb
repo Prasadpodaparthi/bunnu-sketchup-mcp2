@@ -170,10 +170,10 @@ class TestLogger < Minitest::Test
 
   def test_log_to_file_failure_fallback_is_one_shot
     # The fallback notice must appear ONCE per failure episode, not once per
-    # line — an unwritable log path under traffic must never flood the shared
-    # Ruby console (the very clutter warehouse reject #2 was about). ConfigReset
-    # in setup clears the one-shot flag, so the first failed write emits and the
-    # rest are suppressed until a successful write re-arms it.
+    # line — an unwritable log path under traffic must never flood the Ruby
+    # console every other extension shares. ConfigReset in setup clears the
+    # one-shot flag, so the first failed write emits and the rest are
+    # suppressed until a successful write re-arms it.
     MCPforSketchUp::Core::Config.log_to_file   = true
     MCPforSketchUp::Core::Config.log_file_path = "/nonexistent/dir/x.log"
     captured = StringIO.new

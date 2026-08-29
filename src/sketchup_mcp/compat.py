@@ -13,11 +13,15 @@ from sketchup_mcp.errors import IncompatibleVersionError
 # Bumped together with CLIENT_VERSION at release time. See docs/release.md.
 # Policy: MAX_* tracks the new release; MIN_* moves only on a release
 # that breaks wire/handler contract with the previous counterpart.
-# Currently MIN == MAX (exact-match handshake); 0.3.0 moved both floors on the
-# batch-1+2 handler-contract break (absolute transform position, stricter
-# validation, changed response shapes) — see docs/release.md.
+# 0.3.0 moved both floors on the batch-1+2 handler-contract break (absolute
+# transform position, stricter validation, changed response shapes). 0.3.1 is
+# packaging and copy only, so neither floor moved and both 0.3.1 artifacts
+# declare 0.3.0..0.3.1. That does NOT make a mixed pair work: each side's MAX_*
+# tracks its own release, so an installed 0.3.0 plugin rejects a 0.3.1 client at
+# the handshake, and a 0.3.0 client rejects a 0.3.1 plugin. The Python package
+# and the .rbz are upgraded together — see docs/release.md.
 MIN_RUBY = "0.3.0"
-MAX_RUBY = "0.3.0"
+MAX_RUBY = "0.3.1"
 
 # JSON-RPC application-error code returned by the Ruby handler when the
 # eval gate is closed. Single source of truth for Python callers — see
@@ -65,11 +69,20 @@ def check_ruby_version(server_version: str | None) -> None:
 
 
 def _msg_ruby_too_old(rv: str) -> str:
+    # Names MAX_RUBY alone, never the MIN..MAX range. The range is what THIS
+    # side accepts; printed to a human it reads as "any of these will work",
+    # and none but MAX will. test_max_ruby_matches_python_version pins
+    # MAX_RUBY to CLIENT_VERSION and test_max_python_matches_server_version
+    # mirrors it on the Ruby side, so a pair connects only when both versions
+    # are equal — a reader who installed MIN_RUBY from this text would land on
+    # a plugin the handshake still rejects, from the other side. MIN_RUBY stays
+    # where it is: it records that the contract last broke in 0.3.0, and it
+    # regains meaning the day those pinning tests are relaxed. Restore the
+    # range here if that happens.
     return (
         f"SketchUp plugin v{rv} is too old for sketchup-mcp2 v{CLIENT_VERSION} "
-        f"(requires v{MIN_RUBY}..v{MAX_RUBY}). "
-        f"Reinstall mcp_for_sketchup_v{MAX_RUBY}-warehouse.rbz (or the "
-        f"-github variant for eval_ruby) from the GitHub release. "
+        f"(which works only with plugin v{MAX_RUBY}). "
+        f"Reinstall mcp_for_sketchup_v{MAX_RUBY}.rbz from the GitHub release. "
         f"Call `get_version` to inspect handshake state."
     )
 
@@ -86,7 +99,6 @@ def _msg_ruby_too_new(rv: str) -> str:
 def _msg_ruby_missing() -> str:
     return (
         f"SketchUp plugin pre-dates version-compat checking. "
-        f"Reinstall mcp_for_sketchup_v{MAX_RUBY}-warehouse.rbz (or the "
-        f"-github variant for eval_ruby) from the GitHub release. "
+        f"Reinstall mcp_for_sketchup_v{MAX_RUBY}.rbz from the GitHub release. "
         f"Call `get_version` to inspect handshake state."
     )

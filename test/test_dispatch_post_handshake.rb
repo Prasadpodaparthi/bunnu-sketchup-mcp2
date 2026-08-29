@@ -127,7 +127,7 @@ class TestDispatchPostHandshake < Minitest::Test
       "Dispatch must not embed server_version; that lives in Server now"
   end
 
-  # --- eval_ruby gate (warehouse compliance) ---
+  # --- eval_ruby gate ---
   # Iter-1 CRITICAL-8: `saved_eval` is a local var (lowercase). An uppercase
   # name would be parsed as a constant — Ruby raises `dynamic constant
   # assignment` inside method bodies — so this local must stay lowercase.

@@ -7,6 +7,8 @@ module ConfigReset
     c.host           = nil
     c.port           = nil
     c.log_level      = nil
+    # NB: nil resets the eval gate to its effective default, which is now OPEN
+    # (`eval_enabled?` → true) — gate-sensitive tests must set state explicitly.
     c.eval_enabled   = nil
     c.log_to_file    = nil
     c.log_file_path  = nil

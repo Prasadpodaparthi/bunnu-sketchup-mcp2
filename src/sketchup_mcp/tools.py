@@ -415,11 +415,12 @@ async def eval_ruby(
 ) -> str:
     """Evaluate arbitrary Ruby code in SketchUp.
 
-    Disabled by default in the Extension Warehouse build. If disabled, the
-    SketchUp side returns JSON-RPC code -32010 with a user-facing message
-    explaining how to enable it. This wrapper surfaces that message as a
-    plain string so the LLM can repeat it to the user verbatim — without
-    the `[code]` prefix that format_error would otherwise add.
+    Enabled by default; the user can close the gate in the SketchUp
+    extension's Settings. When closed, the SketchUp side returns JSON-RPC
+    code -32010 with a user-facing message explaining how to re-enable it.
+    This wrapper surfaces that message as a plain string so the LLM can
+    repeat it to the user verbatim — without the `[code]` prefix that
+    format_error would otherwise add.
 
     Returns the .to_s of the LAST evaluated expression; stdout (puts) is NOT
     captured. End scripts with an explicit expression — e.g. a final

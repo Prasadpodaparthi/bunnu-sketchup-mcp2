@@ -83,19 +83,13 @@ end
 # load_state_payload is a pure data-builder (no UI::HtmlDialog dependency),
 # so it is unit-testable. It reads Config + Application state. The key
 # guarantee (iter-1 CRITICAL-2): :eval_enabled is sourced from the
-# `eval_enabled?` predicate, NOT the raw accessor — so a sentinel-nil
-# unset pref resolves to the effective `false`, never leaks `nil` to the UI.
+# `eval_enabled?` predicate, NOT the raw accessor — so an unread pref
+# resolves to the effective default, never leaking `nil` to the UI.
 class TestSettingsDialogLoadStatePayload < Minitest::Test
   S = MCPforSketchUp::UI::SettingsDialog
 
   def setup
     ConfigReset.reset_all!
-    # Order-independence: ensure no BuildProfile lingers from another test
-    # file in the same run_all.rb process, so eval_enabled? falls through to
-    # the safe warehouse default of `false`.
-    if MCPforSketchUp::Core.const_defined?(:BuildProfile)
-      MCPforSketchUp::Core.send(:remove_const, :BuildProfile)
-    end
     MCPforSketchUp::Core::Config.host         = "127.0.0.1"
     MCPforSketchUp::Core::Config.port         = 9876
     MCPforSketchUp::Core::Config.log_level    = "INFO"
@@ -105,18 +99,18 @@ class TestSettingsDialogLoadStatePayload < Minitest::Test
     ConfigReset.reset_all!
   end
 
-  # CRITICAL-2 predicate: unset pref (nil) + no BuildProfile => effective
-  # false, never nil. Proves load_state_payload uses eval_enabled?, not the
-  # raw `eval_enabled` accessor (which would be nil here).
-  def test_eval_enabled_is_effective_false_not_nil_when_unset
+  # Предикатная гарантия (iter-1 CRITICAL-2): :eval_enabled в payload берётся
+  # из `eval_enabled?`, а не из сырого аксессора — не прочитанный pref обязан
+  # прийти в UI как эффективное булево, иначе чекбокс останется в
+  # неопределённом состоянии.
+  def test_eval_enabled_is_effective_default_not_nil_when_unset
     assert_nil MCPforSketchUp::Core::Config.eval_enabled,
-               "precondition: raw accessor should be nil (sentinel-unset)"
-    refute MCPforSketchUp::Core.const_defined?(:BuildProfile),
-           "precondition: no BuildProfile loaded"
+               "precondition: raw accessor should be nil (nothing loaded yet)"
 
     payload = S.load_state_payload
-    assert_equal false, payload[:eval_enabled],
-                 "must be effective `false` (eval_enabled?), not the raw nil accessor"
+    assert_equal MCPforSketchUp::Core::Config::DEFAULTS[:eval_enabled],
+                 payload[:eval_enabled],
+                 "must be the effective default (eval_enabled?), not the raw nil accessor"
     refute_nil payload[:eval_enabled]
   end
 
@@ -215,11 +209,6 @@ class TestSettingsDialogOnSaveEvalConfirm < Minitest::Test
 
   def setup
     ConfigReset.reset_all!
-    # No BuildProfile lingering from another file in the same run_all process,
-    # so eval_enabled? resolves purely from the explicit pref we set here.
-    if MCPforSketchUp::Core.const_defined?(:BuildProfile)
-      MCPforSketchUp::Core.send(:remove_const, :BuildProfile)
-    end
     C.host          = "127.0.0.1"
     C.port          = 9876
     C.log_level     = "INFO"
@@ -318,6 +307,33 @@ class TestSettingsDialogOnSaveEvalConfirm < Minitest::Test
 
     refute confirm_shown, "no security confirm should appear when eval is already enabled"
     assert_equal true, C.eval_enabled, "eval stays enabled"
+    assert dialog.closed, "the dialog should close after a normal save"
+  end
+
+  # Штатный путь поставки 0.3.1: pref не сохраняли ни разу, сырой аксессор nil,
+  # эффективное состояние берётся из DEFAULTS[:eval_enabled]. Перехода off→on
+  # поэтому нет, и блокирующий confirm не показывается — ни на свежей установке,
+  # ни при апгрейде поверх сборки, где гейт был закрыт. Раньше это покрывалось
+  # только для load_state_payload; здесь пиннится сама ветка confirm'а, чтобы
+  # возврат nil-ветки eval_enabled? в fail-closed не прошёл молча.
+  def test_no_confirm_is_shown_when_the_pref_was_never_saved
+    C.eval_enabled = nil    # ничего не загружено ⇒ действует shipped default
+    assert C.eval_enabled?, "precondition: непрочитанный pref обязан дать открытый дефолт"
+    dialog = FakeDialog.new
+
+    confirm_shown = false
+    original = S.method(:confirm_eval_enable)
+    S.define_singleton_method(:confirm_eval_enable) { confirm_shown = true; true }
+    begin
+      S.on_save(dialog, eval_on_payload)
+    ensure
+      S.define_singleton_method(:confirm_eval_enable, original)
+    end
+
+    refute confirm_shown,
+      "несохранённый pref резолвится в открытый дефолт, поэтому сохранение " \
+      "eval=on переходом off→on не является и confirm не показывает"
+    assert_equal true, C.eval_enabled, "гейт остаётся открытым"
     assert dialog.closed, "the dialog should close after a normal save"
   end
 end

@@ -10,7 +10,7 @@ module MCPforSketchUp
         host:           "127.0.0.1",
         port:           9876,
         log_level:      "WARN",
-        eval_enabled:   nil,  # sentinel — unset pref triggers BuildProfile fallback (spec §4.2 + iter-1 CRITICAL-1)
+        eval_enabled:   true,
         log_to_file:    false,
         log_file_path:  File.join(Dir.tmpdir, "mcp_for_sketchup.log").freeze,
       }.freeze
@@ -38,33 +38,28 @@ module MCPforSketchUp
         raw_host  = reader.read_default(SECTION, "host",      DEFAULTS[:host]).to_s
         raw_port  = reader.read_default(SECTION, "port",      DEFAULTS[:port])
         raw_level = reader.read_default(SECTION, "log_level", DEFAULTS[:log_level]).to_s.upcase
-        # Sentinel-nil: pass explicit nil so read_default returns nil when key is absent.
-        # That distinguishes «pref unset» (falls back to BuildProfile) from explicit `false`.
-        # See spec §4.2 + iter-1 CRITICAL-1.
-        raw_eval  = reader.read_default(SECTION, "eval_enabled",  nil)
+        raw_eval  = reader.read_default(SECTION, "eval_enabled",  DEFAULTS[:eval_enabled])
         raw_l2f   = reader.read_default(SECTION, "log_to_file",   DEFAULTS[:log_to_file])
         raw_lpath = reader.read_default(SECTION, "log_file_path", DEFAULTS[:log_file_path]).to_s
 
         self.host          = valid_host?(raw_host)   ? raw_host       : warn_invalid_pref(:host,      raw_host)
         self.port          = valid_port?(raw_port)   ? raw_port.to_i  : warn_invalid_pref(:port,      raw_port)
         self.log_level     = LEVELS.key?(raw_level)  ? raw_level      : warn_invalid_pref(:log_level, raw_level)
-        # Absent pref (raw_eval.nil?) stays the nil sentinel → BuildProfile
-        # fallback. A present-but-non-boolean value (tampered/corrupt pref) is
-        # NOT «unset»: it fails CLOSED to false (default: false), so the
-        # arbitrary-code gate never falls through to a truthy build default —
-        # the github variant bakes EVAL_ENABLED_BY_DEFAULT=true and would
-        # otherwise silently RE-OPEN. coerce_bool_pref still never `!!`-coerces a
-        # non-boolean truthy (iter-2 CONCERN-3 + codex 6th-review).
-        self.eval_enabled  = raw_eval.nil? ? nil : coerce_bool_pref(:eval_enabled, raw_eval, default: false)
+        # An absent pref arrives here as DEFAULTS[:eval_enabled] — the ordinary
+        # opt-out model. A present-but-non-boolean value (tampered/corrupt pref)
+        # is different: it fails CLOSED to `false` rather than resolving to the
+        # open default, because an unreadable value is no basis for enabling
+        # arbitrary code execution and the user recovers with one checkbox.
+        # coerce_bool_pref never `!!`-coerces a non-boolean truthy such as the
+        # string "false" (iter-2 CONCERN-3 + codex 6th-review).
+        self.eval_enabled  = coerce_bool_pref(:eval_enabled, raw_eval, default: false)
         self.log_to_file   = coerce_bool_pref(:log_to_file, raw_l2f, default: DEFAULTS[:log_to_file])
         self.log_file_path = raw_lpath.empty? ? DEFAULTS[:log_file_path] : raw_lpath
       end
 
       # Boolean-pref coercion guard (iter-2 CONCERN-3). Returns `value`
       # only when it is a native boolean; otherwise falls back to `default`
-      # and emits a one-shot WARN naming the offending key + value. Keeps
-      # the sentinel-nil path explicit at the call site — callers that
-      # want nil-pass-through must check `value.nil?` themselves.
+      # and emits a one-shot WARN naming the offending key + value.
       def self.coerce_bool_pref(key, value, default:)
         return value if value == true || value == false
         # Guard defined?(Core::Logger) like warn_invalid_pref: this can run
@@ -167,34 +162,31 @@ module MCPforSketchUp
         end
       end
 
-      # eval_enabled? returns the effective gate state. If a runtime pref
-      # has been read (eval_enabled != nil), use it. Otherwise, fall back to
-      # the build-time default — present as Core::BuildProfile when the
-      # plugin was built from package.rb; absent in tests / dev runs (the
-      # safer warehouse default of `false` then applies).
+      # eval_enabled? returns the effective gate state. A pref that has been
+      # read wins; `nil` means load_from_defaults! has not run yet — early boot,
+      # or a unit test that sets nothing — and the shipped default applies.
+      #
+      # Be aware this REVERSED the failure direction in 0.3.1, and the reversal
+      # is deliberate rather than incidental. Through 0.3.0 the nil branch fell
+      # through to Core::BuildProfile and, with no build profile present (tests,
+      # dev runs), to `false` — the gate failed CLOSED on unknown state. Now it
+      # resolves to DEFAULTS[:eval_enabled], which ships `true`, so the same
+      # branch fails OPEN. Nothing in a loaded plugin reaches it: main.rb:44
+      # loads the modules and main.rb:47 calls load_from_defaults! immediately,
+      # and if that raised, the module body aborts — no menu is installed and
+      # Application never exists to be started. So the reversal is unreachable
+      # in the field, not merely unlikely.
+      #
+      # It stops being unreachable the moment a caller can consult the gate
+      # before prefs are loaded — a server start moved out of main.rb, say. Do
+      # not let that land without deciding this again: the guarantees the gate
+      # actually rests on live elsewhere and are untouched (a corrupt pref fails
+      # closed via coerce_bool_pref(default: false); update! demands a literal
+      # `true`; eval_enabled is persisted last so a partial write cannot leave
+      # it open on disk), but none of them covers this branch.
       def self.eval_enabled?
-        unless @eval_enabled.nil?
-          return @eval_enabled
-        end
-        # iter-2 SUGGESTION-2: `const_defined?(:X, false)` skips inherited
-        # constants (e.g. anything reachable through Object). Without the
-        # `false` flag a stray top-level `BuildProfile` or
-        # `EVAL_ENABLED_BY_DEFAULT` constant defined by some other plugin
-        # in the shared Ruby namespace would mask our intent.
-        if Core.const_defined?(:BuildProfile, false) &&
-           Core::BuildProfile.const_defined?(:EVAL_ENABLED_BY_DEFAULT, false)
-          # Strict identity check — the arbitrary-code gate must fail CLOSED.
-          # `!!X` would be WRONG here: in Ruby `!!"false"` and `!!1` are both
-          # `true`, so a build bug that baked a truthy non-boolean into
-          # build_profile.rb would OPEN the gate. Only a literal `true` enables
-          # eval; every other value (the string "false", an Integer, …) resolves
-          # to false. Mirrors the strictness of the runtime-pref read path, which
-          # rejects non-booleans in coerce_bool_pref instead of coercing them
-          # truthy (codex 4th-review review).
-          Core::BuildProfile::EVAL_ENABLED_BY_DEFAULT == true
-        else
-          false
-        end
+        return @eval_enabled unless @eval_enabled.nil?
+        DEFAULTS[:eval_enabled]
       end
 
       def self.level_value

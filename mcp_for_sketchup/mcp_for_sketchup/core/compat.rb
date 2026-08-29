@@ -5,9 +5,9 @@ module MCPforSketchUp
       # SERVER_VERSION mirrors the wire-field `server_version` and avoids
       # shadowing Ruby's global `::RUBY_VERSION` (the interpreter version).
       # This is the SketchUp PLUGIN version, bumped at release time.
-      SERVER_VERSION = "0.3.0"
+      SERVER_VERSION = "0.3.1"
       MIN_PYTHON   = "0.3.0"
-      MAX_PYTHON   = "0.3.0"
+      MAX_PYTHON   = "0.3.1"
 
       PART_RE = /\A[0-9]+\z/.freeze
 
@@ -53,9 +53,15 @@ module MCPforSketchUp
         end
       end
 
+      # Names MAX_PYTHON alone, never the MIN..MAX range — mirror of
+      # compat.py::_msg_ruby_too_old, see the comment there. The range is what
+      # THIS side accepts; printed to a human it reads as «any of these will
+      # work», and none but MAX will, because the counterpart's own MAX cuts
+      # the pair from the other side. MIN_PYTHON stays put: it records the
+      # 0.3.0 contract break.
       def self.msg_python_too_old(cv)
         "sketchup-mcp2 v#{cv} is too old for SketchUp plugin v#{SERVER_VERSION} " \
-        "(requires v#{MIN_PYTHON}..v#{MAX_PYTHON}). Handshake rejected. " \
+        "(which works only with client v#{MAX_PYTHON}). Handshake rejected. " \
         "Run: uv pip install --upgrade sketchup-mcp2. " \
         "Call `get_version` to inspect handshake state."
       end

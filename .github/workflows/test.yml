@@ -18,7 +18,7 @@ jobs:
         with:
           # SketchUp 2024/2025 несут Ruby 3.2.x; для SU2026 то же семейство.
           ruby-version: '3.2'
-      # test_package_default_variant.rb требует rubyzip (не stdlib);
+      # test_package_output.rb требует rubyzip (не stdlib);
       # Gemfile в проекте нет намеренно (см. deep-research T-20).
       # Пин мажора: локально верифицирован rubyzip 3.x; неожиданный мажорный
       # релиз гема не должен красить CI без отношения к коду проекта.
