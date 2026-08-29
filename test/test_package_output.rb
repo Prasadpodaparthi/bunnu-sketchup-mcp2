@@ -5,15 +5,42 @@
 # остальное в корне с «Extra files found».
 require "minitest/autorun"
 require "open3"
+require "fileutils"
+require "tmpdir"
 require "zip"
 
 class TestPackageOutput < Minitest::Test
   PKG_DIR = File.expand_path("../mcp_for_sketchup", __dir__)
 
+  # Прежние артефакты убираются В СТОРОНУ на время прогона, а не удаляются.
+  # Убирать нужно, иначе `assert_equal 1` проверяет не этот прогон. Удалять
+  # нельзя: подпись .rbz жива (docs/release.md §6 — самообслуживаемый сервис
+  # Trimble), поэтому снесённый подписанный артефакт стоит не пересборки, а
+  # повторного круга через сервис. `ruby test/run_all.rb`, запущенный между
+  # подписанием и загрузкой релиза, не должен обходиться пользователю в это.
+  def setup
+    @stash = Dir.mktmpdir("rbz-stash")
+    Dir.chdir(PKG_DIR) do
+      Dir.glob("mcp_for_sketchup_v*.rbz").each do |f|
+        FileUtils.mv(f, File.join(@stash, File.basename(f)))
+      end
+    end
+  end
+
+  # Порядок обязателен: сначала убрать артефакт ЭТОГО прогона, потом вернуть
+  # чужие — иначе возвращённый одноимённый тут же попал бы под удаление.
+  def teardown
+    Dir.chdir(PKG_DIR) do
+      Dir.glob("mcp_for_sketchup_v*.rbz").each { |f| File.delete(f) }
+      Dir.glob(File.join(@stash, "*.rbz")).each do |f|
+        FileUtils.mv(f, File.basename(f))
+      end
+    end
+    FileUtils.remove_entry(@stash)
+  end
+
   def test_package_rb_emits_one_unsuffixed_rbz_with_a_correct_loader
     Dir.chdir(PKG_DIR) do
-      # Чистим прежние артефакты, чтобы проверять именно этот прогон.
-      Dir.glob("mcp_for_sketchup_v*.rbz").each { |f| File.delete(f) }
       # stderr захватываем, а не выбрасываем: post-build-проверки внутри
       # package.rb (загрузчик на месте, display-имя, версия) прерывают
       # сборку сообщением о том, какая именно не прошла. С err: File::NULL
@@ -60,8 +87,6 @@ class TestPackageOutput < Minitest::Test
         assert_match(/ext\.version\s*=\s*'\d+\.\d+\.\d+'/, body,
           "loader must declare an X.Y.Z version")
       end
-
-      Dir.glob("mcp_for_sketchup_v*.rbz").each { |f| File.delete(f) }
     end
   end
 end
