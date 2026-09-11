@@ -1,4 +1,4 @@
-"""FastMCP tool handlers for SketchUp.
+﻿"""FastMCP tool handlers for SketchUp.
 
 Most tools are thin wrappers that delegate to :func:`_call`, which centralises
 connection acquisition, error handling, and response unwrapping; a few
@@ -19,16 +19,16 @@ from sketchup_mcp.errors import IncompatibleVersionError, SketchUpError, format_
 
 logger = logging.getLogger("sketchup_mcp.tools")
 
-# T-06: хендлеры возвращают id как JSON-число (entity.entityID), а схемы
-# требовали строго str — модель, отдающая {"id": 12345} обратно как int,
-# получала ValidationError (клиентская коэрция это часто маскирует, но
-# прямой call_tool — нет). Принимаем оба типа; на провод уходит str(id),
-# wire-формат неизменен (Ruby require_id парсит строку).
-# P-05: int-ветка СТРОГАЯ — bool является подклассом int, и без strict
-# True тихо коэрсился бы в id "1" (валидная операция над чужой сущностью
-# из мусорного вызова). Строка "3" при этом спокойно проходит str-веткой.
-# T-05: description запечён в alias — все девять id-параметров получают
-# единый LLM-видимый текст по построению.
+# T-06: Ñ…ÐµÐ½Ð´Ð»ÐµÑ€Ñ‹ Ð²Ð¾Ð·Ð²Ñ€Ð°Ñ‰Ð°ÑŽÑ‚ id ÐºÐ°Ðº JSON-Ñ‡Ð¸ÑÐ»Ð¾ (entity.entityID), Ð° ÑÑ…ÐµÐ¼Ñ‹
+# Ñ‚Ñ€ÐµÐ±Ð¾Ð²Ð°Ð»Ð¸ ÑÑ‚Ñ€Ð¾Ð³Ð¾ str â€” Ð¼Ð¾Ð´ÐµÐ»ÑŒ, Ð¾Ñ‚Ð´Ð°ÑŽÑ‰Ð°Ñ {"id": 12345} Ð¾Ð±Ñ€Ð°Ñ‚Ð½Ð¾ ÐºÐ°Ðº int,
+# Ð¿Ð¾Ð»ÑƒÑ‡Ð°Ð»Ð° ValidationError (ÐºÐ»Ð¸ÐµÐ½Ñ‚ÑÐºÐ°Ñ ÐºÐ¾ÑÑ€Ñ†Ð¸Ñ ÑÑ‚Ð¾ Ñ‡Ð°ÑÑ‚Ð¾ Ð¼Ð°ÑÐºÐ¸Ñ€ÑƒÐµÑ‚, Ð½Ð¾
+# Ð¿Ñ€ÑÐ¼Ð¾Ð¹ call_tool â€” Ð½ÐµÑ‚). ÐŸÑ€Ð¸Ð½Ð¸Ð¼Ð°ÐµÐ¼ Ð¾Ð±Ð° Ñ‚Ð¸Ð¿Ð°; Ð½Ð° Ð¿Ñ€Ð¾Ð²Ð¾Ð´ ÑƒÑ…Ð¾Ð´Ð¸Ñ‚ str(id),
+# wire-Ñ„Ð¾Ñ€Ð¼Ð°Ñ‚ Ð½ÐµÐ¸Ð·Ð¼ÐµÐ½ÐµÐ½ (Ruby require_id Ð¿Ð°Ñ€ÑÐ¸Ñ‚ ÑÑ‚Ñ€Ð¾ÐºÑƒ).
+# P-05: int-Ð²ÐµÑ‚ÐºÐ° Ð¡Ð¢Ð ÐžÐ“ÐÐ¯ â€” bool ÑÐ²Ð»ÑÐµÑ‚ÑÑ Ð¿Ð¾Ð´ÐºÐ»Ð°ÑÑÐ¾Ð¼ int, Ð¸ Ð±ÐµÐ· strict
+# True Ñ‚Ð¸Ñ…Ð¾ ÐºÐ¾ÑÑ€ÑÐ¸Ð»ÑÑ Ð±Ñ‹ Ð² id "1" (Ð²Ð°Ð»Ð¸Ð´Ð½Ð°Ñ Ð¾Ð¿ÐµÑ€Ð°Ñ†Ð¸Ñ Ð½Ð°Ð´ Ñ‡ÑƒÐ¶Ð¾Ð¹ ÑÑƒÑ‰Ð½Ð¾ÑÑ‚ÑŒÑŽ
+# Ð¸Ð· Ð¼ÑƒÑÐ¾Ñ€Ð½Ð¾Ð³Ð¾ Ð²Ñ‹Ð·Ð¾Ð²Ð°). Ð¡Ñ‚Ñ€Ð¾ÐºÐ° "3" Ð¿Ñ€Ð¸ ÑÑ‚Ð¾Ð¼ ÑÐ¿Ð¾ÐºÐ¾Ð¹Ð½Ð¾ Ð¿Ñ€Ð¾Ñ…Ð¾Ð´Ð¸Ñ‚ str-Ð²ÐµÑ‚ÐºÐ¾Ð¹.
+# T-05: description Ð·Ð°Ð¿ÐµÑ‡Ñ‘Ð½ Ð² alias â€” Ð²ÑÐµ Ð´ÐµÐ²ÑÑ‚ÑŒ id-Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ð¾Ð² Ð¿Ð¾Ð»ÑƒÑ‡Ð°ÑŽÑ‚
+# ÐµÐ´Ð¸Ð½Ñ‹Ð¹ LLM-Ð²Ð¸Ð´Ð¸Ð¼Ñ‹Ð¹ Ñ‚ÐµÐºÑÑ‚ Ð¿Ð¾ Ð¿Ð¾ÑÑ‚Ñ€Ð¾ÐµÐ½Ð¸ÑŽ.
 EntityId = Annotated[
     Annotated[int, Field(strict=True)] | Annotated[str, Field(min_length=1)],
     Field(description="Entity ID from a previous response (integer or its string form)"),
@@ -36,8 +36,8 @@ EntityId = Annotated[
 
 
 def _validate_scale_nonzero(v: list[float]) -> list[float]:
-    # T-17 (зеркало Ruby): |s| <= 1e-9 — сингулярная матрица; SU2026
-    # Transformation#inverse на ней кидает ArgumentError.
+    # T-17 (Ð·ÐµÑ€ÐºÐ°Ð»Ð¾ Ruby): |s| <= 1e-9 â€” ÑÐ¸Ð½Ð³ÑƒÐ»ÑÑ€Ð½Ð°Ñ Ð¼Ð°Ñ‚Ñ€Ð¸Ñ†Ð°; SU2026
+    # Transformation#inverse Ð½Ð° Ð½ÐµÐ¹ ÐºÐ¸Ð´Ð°ÐµÑ‚ ArgumentError.
     for i, s in enumerate(v):
         if abs(s) <= 1e-9:
             raise ValueError(f"scale[{i}] must be non-zero (|s| > 1e-9)")
@@ -52,10 +52,10 @@ async def _raw_call(ctx: Context, tool_name: str, /, **kwargs) -> dict:
 
     ``tool_name`` is positional-only (PEP 570) so wrappers can forward
     user kwargs containing a ``name`` key via ``**args`` without
-    colliding with this parameter — see ``find_components`` /
+    colliding with this parameter â€” see ``find_components`` /
     ``create_layer`` callers below for the pattern.
 
-    Does **not** translate :class:`ConnectionError` to anything — that
+    Does **not** translate :class:`ConnectionError` to anything â€” that
     is each caller's responsibility, since callers have divergent
     strategies for unavailable-server (string-returning tools surface a
     graceful string, Image-returning tools raise). Centralising the
@@ -63,13 +63,13 @@ async def _raw_call(ctx: Context, tool_name: str, /, **kwargs) -> dict:
     callers and lose the canonical error text shared by the 22 existing
     text-returning tools.
 
-    See the design's §5.8 for the rationale on error-handling asymmetry
+    See the design's Â§5.8 for the rationale on error-handling asymmetry
     between text-returning and Image-returning tools.
     """
     sketchup = await get_connection()
-    # ConnectionError при недоступном SketchUp поднимает send_command
-    # (ленивый connect под conn._lock, T-08), не get_connection — callers
-    # ловят её как раньше.
+    # ConnectionError Ð¿Ñ€Ð¸ Ð½ÐµÐ´Ð¾ÑÑ‚ÑƒÐ¿Ð½Ð¾Ð¼ SketchUp Ð¿Ð¾Ð´Ð½Ð¸Ð¼Ð°ÐµÑ‚ send_command
+    # (Ð»ÐµÐ½Ð¸Ð²Ñ‹Ð¹ connect Ð¿Ð¾Ð´ conn._lock, T-08), Ð½Ðµ get_connection â€” callers
+    # Ð»Ð¾Ð²ÑÑ‚ ÐµÑ‘ ÐºÐ°Ðº Ñ€Ð°Ð½ÑŒÑˆÐµ.
     return await sketchup.send_command(tool_name, kwargs)  # raises SketchUpError
 
 
@@ -77,7 +77,7 @@ def _extract_text(result: object) -> str:
     """Unwrap a Ruby handler's MCP content envelope to its text payload.
 
     Both :func:`_call` and the ``eval_ruby`` tool share the same response
-    shape — ``{"content": [{"text": ...}], ...}``. Falls back to a JSON
+    shape â€” ``{"content": [{"text": ...}], ...}``. Falls back to a JSON
     dump for any result that isn't a well-formed text-content envelope.
     """
     content = result.get("content") if isinstance(result, dict) else None
@@ -94,7 +94,7 @@ def _extract_text(result: object) -> str:
 async def _call(ctx: Context, tool_name: str, /, **kwargs) -> str:
     """Dispatch a tool call to SketchUp and shape the response for Claude.
 
-    Same external contract as before — kept for compatibility with the 22
+    Same external contract as before â€” kept for compatibility with the 22
     existing string-returning tools. Now delegates to :func:`_raw_call`
     for connection acquisition and converts the result to a string.
     Connection failures surface as the canonical legacy string so the LLM
@@ -106,7 +106,7 @@ async def _call(ctx: Context, tool_name: str, /, **kwargs) -> str:
         return f"SketchUp not running or extension not started: {e}"
     except SketchUpError as e:
         # Locally-raised transport errors (timeout, stale socket, oversize)
-        # carry no `tool` in data → format_error would render `tool=?`.
+        # carry no `tool` in data â†’ format_error would render `tool=?`.
         # Backfill it from the tool name; setdefault never overrides a
         # Ruby-origin error that already carries its own `tool`.
         e.data.setdefault("tool", tool_name)
@@ -158,6 +158,113 @@ async def create_component(
 
 
 @mcp.tool()
+async def create_curve(
+    ctx: Context,
+    points: Annotated[
+        list[list[float]],
+        Field(
+            min_length=2,
+            description="3D curve points [[x,y,z], ...] in mm. At least 2 points.",
+        ),
+    ],
+    closed: Annotated[
+        bool,
+        Field(description="Whether to close the curve by connecting the last point to the first point"),
+    ] = False,
+    name: Annotated[
+        Optional[Annotated[str, Field(min_length=1)]],
+        Field(description="Optional name for the curve group"),
+    ] = None,
+) -> str:
+    """Create a SketchUp curve from 3D points.
+
+    All coordinates are millimeters (mm).
+
+    Points are interpreted as model coordinates [x, y, z].
+    The resulting curve is wrapped in a SketchUp Group.
+
+    Set closed=true to connect the final point back to the first point.
+
+    Returns JSON containing:
+    {id, name, type, closed, point_count, bbox_mm{min,max}}.
+    """
+    args: dict = {
+        "points": points,
+        "closed": closed,
+    }
+
+    if name is not None:
+        args["name"] = name
+
+    return await _call(ctx, "create_curve", **args)
+
+@mcp.tool()
+async def create_circle(
+    ctx: Context,
+    center: Annotated[
+        list[float],
+        Field(
+            min_length=3,
+            max_length=3,
+            description="Circle center [x, y, z] in mm",
+        ),
+    ],
+    radius: Annotated[
+        float,
+        Field(
+            gt=0,
+            description="Circle radius in mm",
+        ),
+    ],
+    normal: Annotated[
+        list[float],
+        Field(
+            min_length=3,
+            max_length=3,
+            description="Circle plane normal vector [x, y, z]",
+        ),
+    ] = [0, 0, 1],
+    segments: Annotated[
+        int,
+        Field(
+            ge=8,
+            le=512,
+            description="Number of segments used to represent the circle",
+        ),
+    ] = 96,
+    name: Annotated[
+        Optional[Annotated[str, Field(min_length=1)]],
+        Field(description="Optional name for the circle group"),
+    ] = None,
+) -> str:
+    """Create a true circular curve in SketchUp.
+
+    All linear values are millimeters.
+
+    center is the circle center [x, y, z].
+    radius is the true circle radius in mm.
+    normal defines the plane perpendicular to the circle.
+    segments controls geometric resolution; higher values produce
+    a more accurate circular approximation.
+
+    Returns JSON containing:
+    {id, name, type, center_mm, radius_mm, normal, segments,
+     bbox_mm{min,max}}.
+    """
+    args: dict = {
+        "center": center,
+        "radius": radius,
+        "normal": normal,
+        "segments": segments,
+    }
+
+    if name is not None:
+        args["name"] = name
+
+    return await _call(ctx, "create_circle", **args)
+
+
+@mcp.tool()
 async def delete_component(
     ctx: Context,
     id: EntityId,
@@ -193,7 +300,7 @@ async def transform_component(
     """Move, rotate and/or scale a group or component (mm / degrees).
 
     - position: ABSOLUTE target for the entity's bounding-box MIN corner,
-      in mm — the same anchor create_component uses. Applied LAST (after
+      in mm â€” the same anchor create_component uses. Applied LAST (after
       rotation/scale), so the final bbox-min lands exactly at [x, y, z]
       even in combined calls. It is NOT a relative offset: repeating the
       same position is idempotent.
@@ -202,7 +309,7 @@ async def transform_component(
     - scale: RELATIVE scale factors about the bbox center.
 
     These validations (3-element lists, non-zero scale) apply only to this
-    typed tool — raw Ruby driven through eval_ruby bypasses them.
+    typed tool â€” raw Ruby driven through eval_ruby bypasses them.
 
     Returns: JSON {id, name, type, bbox_mm{min,max}|null}. Read bbox_mm to
     verify the result; it is null for empty geometry.
@@ -221,7 +328,7 @@ async def transform_component(
 async def get_selection(ctx: Context) -> str:
     """Get the entities currently selected in the SketchUp UI.
 
-    Returns: JSON {entities: [...]} — groups/components are {id, name, type,
+    Returns: JSON {entities: [...]} â€” groups/components are {id, name, type,
     layer, depth, bbox_mm|null}; other selected entities (edges, faces, ...)
     are {id, type} only.
     """
@@ -240,13 +347,13 @@ async def set_material(
 ) -> str:
     """Assign a material (color) to a group or component.
 
-    material accepts a named color — red, green, blue, yellow, cyan,
+    material accepts a named color â€” red, green, blue, yellow, cyan,
     turquoise, magenta, purple, white, black, brown, wood, orange, gray,
-    grey — or a 6-digit hex string like "#a05030" (#rrggbb). Anything else
+    grey â€” or a 6-digit hex string like "#a05030" (#rrggbb). Anything else
     fails with error -32602. Named colors are case-insensitive. Painting
     affects only this instance (it is made unique first). That applies to
     groups/components; painting a raw face/edge id (obtainable via
-    get_selection) colors the shared definition — all instances show it.
+    get_selection) colors the shared definition â€” all instances show it.
 
     Returns: JSON {id, name, type, bbox_mm{min,max}|null}.
     """
@@ -266,18 +373,18 @@ async def export_scene(
     """Export the current scene to a temp file on the SketchUp host.
 
     Formats: skp (native), obj / dae / stl (geometry), png / jpg (viewport
-    render, default 1920×1080). The file is written on the machine running
-    SketchUp — on a split-host setup the path is not directly readable here.
+    render, default 1920Ã—1080). The file is written on the machine running
+    SketchUp â€” on a split-host setup the path is not directly readable here.
 
     Returns: JSON {path, format} plus a "warning" field when exporting skp
     from a never-saved model (SketchUp binds the live document to the export
-    path — relay the warning to the user).
+    path â€” relay the warning to the user).
     """
     return await _call(ctx, "export", format=format)
 
 
 # Pydantic always sends the sized defaults (50/25/10 mm) on the wire, so they
-# override Ruby's V.optional_positive defaults — keep the two sides in sync
+# override Ruby's V.optional_positive defaults â€” keep the two sides in sync
 # (see mcp_for_sketchup/mcp_for_sketchup/handlers/joints.rb).
 @mcp.tool()
 async def create_mortise_tenon(
@@ -301,7 +408,7 @@ async def create_mortise_tenon(
     already touch/overlap along the joint axis.
 
     Returns: JSON {mortise: {id, name, type, bbox_mm|null}, tenon: {...},
-    boolean_cuts: {attempted, failed}} — non-zero failed means some cuts did
+    boolean_cuts: {attempted, failed}} â€” non-zero failed means some cuts did
     not apply (likely non-manifold geometry); verify via bbox_mm.
     """
     return await _call(
@@ -345,7 +452,7 @@ async def create_dovetail(
     joint axis.
 
     Returns: JSON {tail: {id, name, type, bbox_mm|null}, pin: {...},
-    boolean_cuts: {attempted, failed}} — non-zero failed means some cuts did
+    boolean_cuts: {attempted, failed}} â€” non-zero failed means some cuts did
     not apply (likely non-manifold geometry); verify via bbox_mm.
     """
     return await _call(
@@ -387,7 +494,7 @@ async def create_finger_joint(
     already touch/overlap along the joint axis.
 
     Returns: JSON {board1: {id, name, type, bbox_mm|null}, board2: {...},
-    boolean_cuts: {attempted, failed}} — non-zero failed means some cuts did
+    boolean_cuts: {attempted, failed}} â€” non-zero failed means some cuts did
     not apply (likely non-manifold geometry); verify via bbox_mm.
     """
     return await _call(
@@ -419,12 +526,12 @@ async def eval_ruby(
     extension's Settings. When closed, the SketchUp side returns JSON-RPC
     code -32010 with a user-facing message explaining how to re-enable it.
     This wrapper surfaces that message as a plain string so the LLM can
-    repeat it to the user verbatim — without the `[code]` prefix that
+    repeat it to the user verbatim â€” without the `[code]` prefix that
     format_error would otherwise add.
 
     Returns the .to_s of the LAST evaluated expression; stdout (puts) is NOT
-    captured. End scripts with an explicit expression — e.g. a final
-    `result.to_json` — to get structured data back. Errors return
+    captured. End scripts with an explicit expression â€” e.g. a final
+    `result.to_json` â€” to get structured data back. Errors return
     "[code] message" with the Ruby exception class and message.
     """
     try:
@@ -461,7 +568,7 @@ async def boolean_operation(
     """Perform a boolean operation (union / difference / intersection) on two solids.
 
     difference = target minus tool. Operating on an instance of a shared
-    definition consumes only that instance — the result is a new group,
+    definition consumes only that instance â€” the result is a new group,
     sibling instances are untouched. Unreliable on non-manifold geometry.
 
     Returns: JSON {id, name, type, bbox_mm{min,max}|null}. Read bbox_mm to
@@ -494,7 +601,7 @@ async def chamfer_edge(
     By default ALL edges are chamfered. Unreliable on non-manifold geometry.
 
     Returns: JSON {id, name, type, bbox_mm|null, edges_chamfered,
-    stats{attempted, skipped_no_match, subtract_failed, succeeded}} — check
+    stats{attempted, skipped_no_match, subtract_failed, succeeded}} â€” check
     stats.subtract_failed == 0 (failed cuts) and stats.skipped_no_match == 0
     (edges consumed by earlier cuts).
     """
@@ -520,7 +627,7 @@ async def fillet_edge(
     By default ALL edges are filleted. Unreliable on non-manifold geometry.
 
     Returns: JSON {id, name, type, bbox_mm|null, edges_filleted,
-    stats{attempted, skipped_no_match, subtract_failed, succeeded}} — check
+    stats{attempted, skipped_no_match, subtract_failed, succeeded}} â€” check
     stats.subtract_failed == 0 (failed cuts) and stats.skipped_no_match == 0
     (edges consumed by earlier cuts).
     """
@@ -529,8 +636,8 @@ async def fillet_edge(
     )
 
 
-# Note on operation order (Ruby handler): snapshot → preset → style →
-# zoom_extents → write_image → restore. Restore runs in an outer `ensure`
+# Note on operation order (Ruby handler): snapshot â†’ preset â†’ style â†’
+# zoom_extents â†’ write_image â†’ restore. Restore runs in an outer `ensure`
 # block, so an exception anywhere between snapshot and write_image still
 # leaves the viewport in its original state.
 @mcp.tool()
@@ -564,7 +671,7 @@ async def get_viewport_screenshot(
         Field(description="Restore the camera and rendering options after "
                           "the shot, leaving the user's viewport unchanged"),
     ] = True,
-    # NB: bare `list` on purpose — `list[Image | str]` crashes FastMCP tool
+    # NB: bare `list` on purpose â€” `list[Image | str]` crashes FastMCP tool
     # registration on mcp 1.27.
 ) -> list:
     """Capture the current SketchUp viewport; returns the PNG image plus a JSON text block {width, height, preset_used, style_used}.
@@ -590,7 +697,7 @@ async def get_viewport_screenshot(
     # the transport logic of _call. _raw_call does NOT translate
     # ConnectionError (text-tools and Image-tools have divergent strategies),
     # so we convert here: there is no Image sentinel for "not connected",
-    # so raise SketchUpError. See design §5.8 for the error-handling
+    # so raise SketchUpError. See design Â§5.8 for the error-handling
     # asymmetry rationale.
     try:
         raw = await _raw_call(
@@ -639,9 +746,9 @@ async def get_viewport_screenshot(
         png_bytes = base64.b64decode(b64, validate=True)
     except (ValueError, base64.binascii.Error) as e:
         raise SketchUpError(-32603, f"png_base64 decode failed: {e}") from e
-    # T-28: Ruby отдаёт размеры и фактически применённые preset/style —
-    # пробрасываем их текстовым блоком рядом с картинкой, чтобы модель могла
-    # проверить параметры захвата (а не выбрасываем, как раньше).
+    # T-28: Ruby Ð¾Ñ‚Ð´Ð°Ñ‘Ñ‚ Ñ€Ð°Ð·Ð¼ÐµÑ€Ñ‹ Ð¸ Ñ„Ð°ÐºÑ‚Ð¸Ñ‡ÐµÑÐºÐ¸ Ð¿Ñ€Ð¸Ð¼ÐµÐ½Ñ‘Ð½Ð½Ñ‹Ðµ preset/style â€”
+    # Ð¿Ñ€Ð¾Ð±Ñ€Ð°ÑÑ‹Ð²Ð°ÐµÐ¼ Ð¸Ñ… Ñ‚ÐµÐºÑÑ‚Ð¾Ð²Ñ‹Ð¼ Ð±Ð»Ð¾ÐºÐ¾Ð¼ Ñ€ÑÐ´Ð¾Ð¼ Ñ ÐºÐ°Ñ€Ñ‚Ð¸Ð½ÐºÐ¾Ð¹, Ñ‡Ñ‚Ð¾Ð±Ñ‹ Ð¼Ð¾Ð´ÐµÐ»ÑŒ Ð¼Ð¾Ð³Ð»Ð°
+    # Ð¿Ñ€Ð¾Ð²ÐµÑ€Ð¸Ñ‚ÑŒ Ð¿Ð°Ñ€Ð°Ð¼ÐµÑ‚Ñ€Ñ‹ Ð·Ð°Ñ…Ð²Ð°Ñ‚Ð° (Ð° Ð½Ðµ Ð²Ñ‹Ð±Ñ€Ð°ÑÑ‹Ð²Ð°ÐµÐ¼, ÐºÐ°Ðº Ñ€Ð°Ð½ÑŒÑˆÐµ).
     meta = {
         "width": payload.get("width"),
         "height": payload.get("height"),
@@ -675,7 +782,7 @@ async def list_components(
     limit: Annotated[
         int,
         Field(ge=1, le=500,
-              description="Page size — maximum components per response"),
+              description="Page size â€” maximum components per response"),
     ] = 50,
     offset: Annotated[
         int,
@@ -694,7 +801,7 @@ async def list_components(
     Set recursive=true to descend into nested components (bounded by
     max_depth, default 3).
 
-    Returns: JSON {components[], total, offset, truncated} — if truncated,
+    Returns: JSON {components[], total, offset, truncated} â€” if truncated,
     request the next page with offset += limit.
     """
     return await _call(ctx, "list_components", recursive=recursive,
@@ -737,7 +844,7 @@ async def find_components(
     limit: Annotated[
         int,
         Field(ge=1, le=500,
-              description="Page size — maximum components per response"),
+              description="Page size â€” maximum components per response"),
     ] = 50,
     offset: Annotated[
         int,
@@ -753,10 +860,10 @@ async def find_components(
 
     Name matching is case-insensitive substring; layer must match exactly.
     Searches recursively (bounded by max_depth). With no filters it returns
-    all components up to max_depth (paginated) — same traversal as
+    all components up to max_depth (paginated) â€” same traversal as
     list_components.
 
-    Returns: JSON {components[], total, offset, truncated} — if truncated,
+    Returns: JSON {components[], total, offset, truncated} â€” if truncated,
     request the next page with offset += limit.
     """
     args: dict = {"max_depth": max_depth, "limit": limit, "offset": offset,
@@ -804,9 +911,9 @@ async def undo(ctx: Context) -> str:
 
 @mcp.tool()
 async def get_version(ctx: Context) -> str:
-    """Return the server version and Python↔Ruby compatibility verdict.
+    """Return the server version and Pythonâ†”Ruby compatibility verdict.
 
-    Useful as a runtime sanity probe — always returns a payload, even
+    Useful as a runtime sanity probe â€” always returns a payload, even
     when the connection or other tools surface errors. The result is a
     JSON string with fields: python_version, ruby_version,
     min_compatible_ruby, max_compatible_ruby, ruby_min_compatible_python,
@@ -839,7 +946,7 @@ async def get_version(ctx: Context) -> str:
 
     # Defensive parse: any unexpected shape (missing keys, non-list content,
     # non-string text, invalid JSON, non-dict payload) must STILL produce a
-    # payload — the tool's contract is "always returns a payload even on
+    # payload â€” the tool's contract is "always returns a payload even on
     # mismatch / error", so a KeyError/IndexError/TypeError/JSONDecodeError
     # escaping here would violate it.
     try:
@@ -884,3 +991,4 @@ async def get_version(ctx: Context) -> str:
         error_msg = None
 
     return _payload(ruby_version, ruby_min, ruby_max, compatible, error_msg)
+

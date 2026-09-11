@@ -1,4 +1,4 @@
-# mcp_for_sketchup/mcp_for_sketchup/main.rb
+﻿# mcp_for_sketchup/mcp_for_sketchup/main.rb
 require "sketchup"
 require "json"
 require "socket"
@@ -27,6 +27,7 @@ module MCPforSketchUp
     core/client_state
     handlers/dispatch
     handlers/geometry
+    handlers/bunnu_geometry
     handlers/operations
     handlers/joints
     handlers/materials
@@ -70,3 +71,4 @@ module MCPforSketchUp
     file_loaded(__FILE__)
   end
 end
+

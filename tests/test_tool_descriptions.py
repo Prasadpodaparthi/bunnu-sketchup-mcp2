@@ -1,4 +1,4 @@
-"""T-05: контракт с LLM — докстринг и Field(description) это ЕДИНСТВЕННОЕ,
+﻿"""T-05: контракт с LLM — докстринг и Field(description) это ЕДИНСТВЕННОЕ,
 что видит модель. Тесты держат 100%-покрытие описаний и отсутствие утечек
 внутренних заметок."""
 import json
@@ -9,7 +9,7 @@ import sketchup_mcp.tools  # noqa: F401 — регистрация тулов
 
 async def test_every_tool_parameter_has_description():
     tools = await mcp.list_tools()
-    assert len(tools) == 22
+    assert len(tools) == 24
     missing = []
     for tool in tools:
         for pname, pschema in tool.inputSchema.get("properties", {}).items():
