@@ -99,7 +99,9 @@ class TestLogger < Minitest::Test
 
   def test_log_to_file_disabled_does_not_create_file
     require "tempfile"
-    path = Tempfile.new("mcp_test_log").path
+    tmp = Tempfile.new("mcp_test_log")
+    path = tmp.path
+    tmp.close
     File.delete(path) if File.exist?(path)
     MCPforSketchUp::Core::Config.log_to_file = false
     MCPforSketchUp::Core::Config.log_file_path = path
@@ -109,7 +111,9 @@ class TestLogger < Minitest::Test
 
   def test_log_to_file_enabled_writes_to_path
     require "tempfile"
-    path = Tempfile.new("mcp_test_log").path
+    tmp = Tempfile.new("mcp_test_log")
+    path = tmp.path
+    tmp.close
     File.delete(path) if File.exist?(path)
     MCPforSketchUp::Core::Config.log_to_file = true
     MCPforSketchUp::Core::Config.log_file_path = path
@@ -125,7 +129,9 @@ class TestLogger < Minitest::Test
 
   def test_log_to_file_append_semantics
     require "tempfile"
-    path = Tempfile.new("mcp_test_log").path
+    tmp = Tempfile.new("mcp_test_log")
+    path = tmp.path
+    tmp.close
     File.delete(path) if File.exist?(path)
     MCPforSketchUp::Core::Config.log_to_file = true
     MCPforSketchUp::Core::Config.log_file_path = path
@@ -197,7 +203,9 @@ class TestLogger < Minitest::Test
     # names, Unicode in exception messages) is written rather than dropped by
     # the rescue on a platform whose default external encoding is not UTF-8.
     require "tempfile"
-    path = Tempfile.new("mcp_test_log").path
+    tmp = Tempfile.new("mcp_test_log")
+    path = tmp.path
+    tmp.close
     File.delete(path) if File.exist?(path)
     MCPforSketchUp::Core::Config.log_to_file  = true
     MCPforSketchUp::Core::Config.log_file_path = path

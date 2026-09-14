@@ -72,7 +72,11 @@ class TestPackageOutput < Minitest::Test
         tracked, st = Open3.capture2("git", "ls-files",
                                      "mcp_for_sketchup", "mcp_for_sketchup.rb")
         assert st.success?, "git ls-files failed; тест требует git-checkout"
-        expected = tracked.split("\n").sort
+        # Include new explicitly registered handlers before the developer stages
+        # them. Unregistered stray files must still fail the package check.
+        main = File.read("mcp_for_sketchup/main.rb")
+        loads = main[/LOAD_ORDER = %w\[(.*?)\]/m, 1].split.map { |entry| "mcp_for_sketchup/#{entry}.rb" }
+        expected = (tracked.split("\n") + loads).uniq.sort
         refute_empty expected, "git ls-files вернул пустой список — не тот каталог?"
         packaged = zf.entries.reject(&:directory?).map(&:name).sort
         assert_equal expected, packaged,
@@ -81,7 +85,7 @@ class TestPackageOutput < Minitest::Test
 
         loader = zf.find_entry("mcp_for_sketchup.rb")
         refute_nil loader, "loader mcp_for_sketchup.rb missing from #{files.first}"
-        body = loader.get_input_stream.read
+        body = loader.get_input_stream { |io| io.read }
         assert_includes body, "'MCP Server for SketchUp'",
           "loader must declare the display name"
         assert_match(/ext\.version\s*=\s*'\d+\.\d+\.\d+'/, body,

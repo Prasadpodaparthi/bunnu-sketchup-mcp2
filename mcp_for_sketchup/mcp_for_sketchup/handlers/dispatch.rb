@@ -161,6 +161,36 @@ module MCPforSketchUp
 
       def self.call_handler(tool, params)
         case tool
+        when "create_assembly"
+          Handlers::Assemblies.create_assembly(params)
+
+        when "reparent_entities"
+          Handlers::Assemblies.reparent_entities(params)
+
+        when "duplicate_component"
+          Handlers::Assemblies.duplicate_component(params)
+
+        when "get_camera"
+          Handlers::Cameras.get_camera(params)
+
+        when "set_camera"
+          Handlers::Cameras.set_camera(params)
+
+        when "save_scene"
+          Handlers::Scenes.save_scene(params)
+
+        when "list_scenes"
+          Handlers::Scenes.list_scenes(params)
+
+        when "activate_scene"
+          Handlers::Scenes.activate_scene(params)
+
+        when "delete_scene"
+          Handlers::Scenes.delete_scene(params)
+
+        when "save_model"
+          Handlers::Export.save_model(params)
+
         when "create_component"
           Handlers::Geometry.create_component(params)
 

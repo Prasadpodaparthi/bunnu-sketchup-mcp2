@@ -28,12 +28,13 @@ module MCPforSketchUp
         validate_closed!(closed)
         validate_samples!(samples)
 
+        context = Helpers::Paths.creation_context(params) if params.key?("parent_path")
         model = E.active_model!
 
         model.start_operation("Bunnu Create Curve", true)
 
         begin
-          group = model.active_entities.add_group
+          group = (context ? context[:entities] : model.active_entities).add_group
 
           control_points = points.map do |point|
             Geom::Point3d.new(
@@ -53,11 +54,12 @@ module MCPforSketchUp
 
           group.name = name.to_s if name && !name.to_s.empty?
 
+          hierarchy = Helpers::Paths.finish_creation(group, context) if context
           model.commit_operation
 
           bbox = group.bounds
 
-          {
+          result = {
             "id" => group.entityID,
             "name" => group.name,
             "type" => "curve",
@@ -78,6 +80,7 @@ module MCPforSketchUp
               ]
             }
           }
+          hierarchy ? result.merge(hierarchy) : result
         rescue StandardError
           model.abort_operation
           raise
@@ -110,12 +113,13 @@ module MCPforSketchUp
 
         validate_circle_segments!(segments)
 
+        context = Helpers::Paths.creation_context(params) if params.key?("parent_path")
         model = E.active_model!
 
         model.start_operation("Bunnu Create Circle", true)
 
         begin
-          group = model.active_entities.add_group
+          group = (context ? context[:entities] : model.active_entities).add_group
 
           center_point = Geom::Point3d.new(
             center[0].to_f.mm,
@@ -146,11 +150,12 @@ module MCPforSketchUp
 
           group.name = name.to_s if name && !name.to_s.empty?
 
+          hierarchy = Helpers::Paths.finish_creation(group, context) if context
           model.commit_operation
 
           bbox = group.bounds
 
-          {
+          result = {
             "id" => group.entityID,
             "name" => group.name,
             "type" => "circle",
@@ -172,6 +177,7 @@ module MCPforSketchUp
               ]
             }
           }
+          hierarchy ? result.merge(hierarchy) : result
         rescue StandardError
           model.abort_operation
           raise

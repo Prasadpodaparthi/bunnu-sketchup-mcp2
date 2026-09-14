@@ -59,6 +59,9 @@ module MCPforSketchUp
       }.freeze
 
       def self.viewport_screenshot(params)
+        if %w[scene_id camera frame_paths projection margin].any? { |k| params.key?(k) }
+          return Cameras.screenshot(params)
+        end
         # `restore_view` covers BOTH camera state AND rendering_options
         # (RenderMode etc.) -- when false, both stay mutated after the call.
         # The name is historic; the param's actual scope is "restore everything

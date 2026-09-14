@@ -1,3 +1,4 @@
+require "tmpdir"
 # test/test_settings_validation.rb
 require "minitest/autorun"
 require_relative "../mcp_for_sketchup/mcp_for_sketchup/ui/settings_validator"
@@ -150,10 +151,10 @@ class TestSettingsValidator < Minitest::Test
 
   def test_log_to_file_normalizes_boolean
     result = V.validate("host" => "127.0.0.1", "port" => "9876", "log_level" => "WARN",
-                        "log_to_file" => "true", "log_file_path" => "/tmp/x.log")
+                        "log_to_file" => "true", "log_file_path" => File.join(Dir.tmpdir, "x.log"))
     assert result[:ok]
     assert_equal true,         result[:normalized][:log_to_file]
-    assert_equal "/tmp/x.log", result[:normalized][:log_file_path]
+    assert_equal File.join(Dir.tmpdir, "x.log"), result[:normalized][:log_file_path]
   end
 
   def test_log_to_file_true_requires_non_empty_path

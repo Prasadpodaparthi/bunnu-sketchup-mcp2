@@ -10,6 +10,29 @@ module MCPforSketchUp
 
       FORMATS = %w[skp obj dae stl png jpg jpeg].freeze
 
+      def self.save_model(params)
+        path = V.require_string(params, "path")
+        unless path.match?(/\A(?:[A-Za-z]:[\\\/]|\/|\\\\)/) && File.extname(path).downcase == ".skp"
+          raise Core::StructuredError.new(-32602, "path must be an absolute .skp filename")
+        end
+        model = E.active_model!
+        if params.key?("expected_current_path") && params["expected_current_path"] != model.path.to_s
+          raise Core::StructuredError.new(-32602, "active model path differs from expected_current_path")
+        end
+        path = File.expand_path(path)
+        unless File.directory?(File.dirname(path))
+          raise Core::StructuredError.new(-32602, "destination directory does not exist")
+        end
+        if File.exist?(path) && !V.optional_bool(params, "overwrite", false)
+          raise Core::StructuredError.new(-32602, "destination exists; overwrite=true is required")
+        end
+        previous = model.path.to_s
+        unless model.save(path)
+          raise Core::StructuredError.new(-32603, "save_model failed")
+        end
+        {"path" => model.path, "previous_path" => previous, "format" => "skp", "saved" => true}
+      end
+
       def self.export(params)
         format = V.require_enum(params, "format", FORMATS).downcase
         format = "jpeg" if format == "jpg"

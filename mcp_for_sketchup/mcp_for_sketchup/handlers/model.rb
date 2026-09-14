@@ -45,6 +45,7 @@ module MCPforSketchUp
       # know about local-space nesting.
 
       def self.list_components(params)
+        return hierarchy_query(params) if params["include_hierarchy"] || params.key?("parent_path")
         recursive = V.optional_bool(params, "recursive", false)
         max_depth = V.optional_int_range(params, "max_depth", min: 1, max: 10, default: DEFAULT_MAX_DEPTH)
         limit, offset, response_format = pagination_params(params)
@@ -189,7 +190,8 @@ module MCPforSketchUp
       def self.paginate(components, limit, offset, response_format)
         page = components.slice(offset, limit) || []
         if response_format == "concise"
-          page = page.map { |c| c.slice("id", "name", "type", "layer", "depth") }
+          page = page.map { |c| c.slice("id", "name", "type", "layer", "depth",
+                                      "persistent_id", "instance_path", "parent_path", "definition_id") }
         end
         {
           "components" => page,
@@ -218,6 +220,7 @@ module MCPforSketchUp
       # depth 64 never occurs in real-world models.
 
       def self.get_component_info(params)
+        return Helpers::Paths.describe(Helpers::Paths.target(params)) if params.key?("instance_path")
         id = V.require_id(params)
         entity = E.find!(id)
         E.require_group_or_component!(entity)
@@ -230,6 +233,7 @@ module MCPforSketchUp
       # ===== find_components =================================================
 
       def self.find_components(params)
+        return hierarchy_query(params, search: true) if params["include_hierarchy"] || params.key?("parent_path")
         name_substring = V.optional_string(params, "name")
         layer_name     = V.optional_string(params, "layer")
         type_filter    = V.optional_enum(params, "type", %w[group component])
@@ -251,6 +255,26 @@ module MCPforSketchUp
             (type_filter.nil? || c["type"] == type_filter)
         end
         paginate(results, limit, offset, response_format)
+      end
+
+      def self.hierarchy_query(params, search: false)
+        p = Helpers::Paths
+        parent = p.resolve(params.fetch("parent_path", ""), root: true)
+        recursive = search || V.optional_bool(params, "recursive", false)
+        depth = V.optional_int_range(params, "max_depth", min: 1, max: 64, default: DEFAULT_MAX_DEPTH)
+        limit, offset, format = pagination_params(params)
+        needle = V.optional_string(params, "name")&.downcase
+        layer = V.optional_string(params, "layer")
+        type = V.optional_enum(params, "type", %w[group component])
+        out = []
+        p.walk(parent, max_depth: recursive ? depth : 0) do |chain|
+          item = p.describe(chain)
+          next if needle && !item["name"].downcase.include?(needle)
+          next if layer && item["layer"] != layer
+          next if type && item["type"] != type
+          out << item
+        end
+        paginate(out, limit, offset, format)
       end
 
       # ===== list_layers =====================================================
@@ -301,8 +325,19 @@ module MCPforSketchUp
       # Returns full {id, name, type, bbox_mm} so Claude can re-locate entities
       # by bounding-box if their IDs become stale after destructive ops.
 
-      def self.get_selection(_params)
+      def self.get_selection(params)
         selection = E.active_model!.selection
+        if V.optional_bool(params, "include_hierarchy", false)
+          parent = E.active_model!.active_path || []
+          return {"entities" => selection.map do |entity|
+            if entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)
+              Helpers::Paths.describe(parent + [entity])
+            else
+              {"id" => entity.entityID, "persistent_id" => entity.persistent_id,
+               "parent_path" => Helpers::Paths.key(parent), "type" => entity.typename.downcase}
+            end
+          end}
+        end
         identity = Geom::Transformation.new
         entities = selection.map do |entity|
           if entity.is_a?(Sketchup::Group) || entity.is_a?(Sketchup::ComponentInstance)

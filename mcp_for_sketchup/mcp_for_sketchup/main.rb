@@ -23,6 +23,7 @@ module MCPforSketchUp
     helpers/validation
     helpers/entities
     helpers/geometry
+    helpers/paths
     core/framing
     core/client_state
     handlers/dispatch
@@ -36,6 +37,9 @@ module MCPforSketchUp
     handlers/eval
     handlers/system
     handlers/view
+    handlers/assemblies
+    handlers/cameras
+    handlers/scenes
     core/server
     core/application
     ui/settings_validator
@@ -68,6 +72,7 @@ module MCPforSketchUp
 
   unless file_loaded?(__FILE__)
     install_menu
+    Handlers::Scenes.install_pose_observers
     file_loaded(__FILE__)
   end
 end

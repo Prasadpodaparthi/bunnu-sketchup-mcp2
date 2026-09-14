@@ -225,3 +225,7 @@ MIT — see [`LICENSE`](LICENSE).
 ## Contributing
 
 Pull requests welcome. Before opening one, please run both test suites (`ruby test/run_all.rb` and `uv run pytest tests/`) and — if you've touched anything in the IO path — the live smokes against a running SketchUp.
+
+## Structured assembly upgrade
+
+See [Structured assemblies and Scenes](docs/structured-assemblies.md) for persistent instance paths, explicit parent targeting, hinge transforms, Scene poses, cameras, and single-master saving. The extension adds ten tools while preserving legacy calls. The engine source must be deployed as a Python/Ruby pair.

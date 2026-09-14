@@ -5,7 +5,7 @@ class TestApplicationFileUri < Minitest::Test
   A = MCPforSketchUp::Core::Application
 
   def test_path_with_spaces_is_percent_encoded
-    uri = A.send(:file_uri_for, "/tmp/hello world.log")
+    uri = File.stub(:expand_path, ->(*a) { a.first }) { A.send(:file_uri_for, "/tmp/hello world.log") }
     assert_equal "file:///tmp/hello%20world.log", uri
   end
 
@@ -24,7 +24,7 @@ class TestApplicationFileUri < Minitest::Test
   end
 
   def test_non_ascii_path_is_percent_encoded
-    uri = A.send(:file_uri_for, "/tmp/журнал.log")
+    uri = File.stub(:expand_path, ->(*a) { a.first }) { A.send(:file_uri_for, "/tmp/журнал.log") }
     # Non-ASCII bytes percent-encoded; exact bytes depend on encoding.
     refute_includes uri, "журнал", "non-ASCII characters must be escaped"
     assert_match(%r{\Afile:///tmp/(%[0-9A-F]{2})+\.log\z}i, uri)

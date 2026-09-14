@@ -1,4 +1,4 @@
-﻿"""FastMCP tool handlers for SketchUp.
+"""FastMCP tool handlers for SketchUp.
 
 Most tools are thin wrappers that delegate to :func:`_call`, which centralises
 connection acquisition, error handling, and response unwrapping; a few
@@ -12,6 +12,7 @@ from typing import Annotated, Literal, Optional
 from mcp.server.fastmcp import Context, Image
 from pydantic import AfterValidator, Field
 
+from sketchup_mcp.assembly_schema import InstancePath, ParentPath, Paths, Matrix16, Vector3, Finite, CameraSpec
 from sketchup_mcp import compat, config
 from sketchup_mcp.app import mcp
 from sketchup_mcp.connection import get_connection
@@ -137,6 +138,8 @@ async def create_component(
         Field(description="Optional name for the new group so "
                           "find_components can locate it later"),
     ] = None,
+    parent_path: Annotated[ParentPath | None, Field(description='Parent persistent-ID path; empty string means model root')] = None,
+    coordinate_space: Annotated[Literal["parent", "world"] | None, Field(description='Coordinate frame; creation requires explicit parent_path')] = None,
 ) -> str:
     """Create a primitive (cube / cylinder / cone / sphere) in SketchUp.
 
@@ -154,6 +157,12 @@ async def create_component(
     args: dict = {"type": type, "position": position, "dimensions": dimensions}
     if name is not None:
         args["name"] = name
+    if parent_path is not None:
+        args["parent_path"] = parent_path
+    if coordinate_space is not None:
+        if parent_path is None:
+            raise ValueError("coordinate_space requires explicit parent_path")
+        args["coordinate_space"] = coordinate_space
     return await _call(ctx, "create_component", **args)
 
 
@@ -175,6 +184,8 @@ async def create_curve(
         Optional[Annotated[str, Field(min_length=1)]],
         Field(description="Optional name for the curve group"),
     ] = None,
+    parent_path: Annotated[ParentPath | None, Field(description='Parent persistent-ID path; empty string means model root')] = None,
+    coordinate_space: Annotated[Literal["parent", "world"] | None, Field(description='Coordinate frame; creation requires explicit parent_path')] = None,
 ) -> str:
     """Create a SketchUp curve from 3D points.
 
@@ -196,6 +207,12 @@ async def create_curve(
     if name is not None:
         args["name"] = name
 
+    if parent_path is not None:
+        args["parent_path"] = parent_path
+    if coordinate_space is not None:
+        if parent_path is None:
+            raise ValueError("coordinate_space requires explicit parent_path")
+        args["coordinate_space"] = coordinate_space
     return await _call(ctx, "create_curve", **args)
 
 @mcp.tool()
@@ -236,6 +253,8 @@ async def create_circle(
         Optional[Annotated[str, Field(min_length=1)]],
         Field(description="Optional name for the circle group"),
     ] = None,
+    parent_path: Annotated[ParentPath | None, Field(description='Parent persistent-ID path; empty string means model root')] = None,
+    coordinate_space: Annotated[Literal["parent", "world"] | None, Field(description='Coordinate frame; creation requires explicit parent_path')] = None,
 ) -> str:
     """Create a true circular curve in SketchUp.
 
@@ -261,13 +280,19 @@ async def create_circle(
     if name is not None:
         args["name"] = name
 
+    if parent_path is not None:
+        args["parent_path"] = parent_path
+    if coordinate_space is not None:
+        if parent_path is None:
+            raise ValueError("coordinate_space requires explicit parent_path")
+        args["coordinate_space"] = coordinate_space
     return await _call(ctx, "create_circle", **args)
 
 
 @mcp.tool()
 async def delete_component(
     ctx: Context,
-    id: EntityId,
+    id: Annotated[EntityId, Field(description='Legacy entityID; must match instance_path when both are supplied')],
 ) -> str:
     """Delete a group or component by entity ID.
 
@@ -279,7 +304,7 @@ async def delete_component(
 @mcp.tool()
 async def transform_component(
     ctx: Context,
-    id: EntityId,
+    id: Annotated[EntityId | None, Field(description='Legacy entityID; must match instance_path when both are supplied')] = None,
     position: Annotated[
         Optional[Annotated[list[float], Field(min_length=3, max_length=3)]],
         Field(description="ABSOLUTE target for the bbox-min corner, mm"),
@@ -296,6 +321,13 @@ async def transform_component(
         ],
         Field(description="relative factors about bbox center, each |s| > 1e-9"),
     ] = None,
+    instance_path: Annotated[InstancePath | None, Field(description='Persistent-ID occurrence path from hierarchy inspection')] = None,
+    coordinate_space: Annotated[Literal["parent", "world", "local"] | None, Field(description='Coordinate frame; creation requires explicit parent_path')] = None,
+    translation_mm: Annotated[Vector3 | None, Field(description='Relative translation in mm')] = None,
+    pivot_mm: Annotated[Vector3 | None, Field(description='Rotation/scaling pivot in the requested frame, mm')] = None,
+    axis: Annotated[Vector3 | None, Field(description='Nonzero rotation axis')] = None,
+    angle_degrees: Annotated[Finite | None, Field(description='Relative rotation about axis in degrees')] = None,
+    matrix_mm: Annotated[Matrix16 | None, Field(description='Absolute column-major affine matrix; translation entries 12..14 in mm')] = None,
 ) -> str:
     """Move, rotate and/or scale a group or component (mm / degrees).
 
@@ -314,7 +346,13 @@ async def transform_component(
     Returns: JSON {id, name, type, bbox_mm{min,max}|null}. Read bbox_mm to
     verify the result; it is null for empty geometry.
     """
-    args: dict = {"id": str(id)}
+    if id is None and instance_path is None:
+        raise ValueError("id or instance_path is required")
+    args: dict = {"id": str(id)} if id is not None else {}
+    args.update({k: v for k, v in dict(instance_path=instance_path,
+        coordinate_space=coordinate_space, translation_mm=translation_mm,
+        pivot_mm=pivot_mm, axis=axis, angle_degrees=angle_degrees,
+        matrix_mm=matrix_mm).items() if v is not None})
     if position is not None:
         args["position"] = position
     if rotation is not None:
@@ -325,20 +363,23 @@ async def transform_component(
 
 
 @mcp.tool()
-async def get_selection(ctx: Context) -> str:
+async def get_selection(
+    ctx: Context,
+    include_hierarchy: Annotated[bool, Field(description="Include persistent instance paths in the current edit context")] = False,
+) -> str:
     """Get the entities currently selected in the SketchUp UI.
 
     Returns: JSON {entities: [...]} â€” groups/components are {id, name, type,
     layer, depth, bbox_mm|null}; other selected entities (edges, faces, ...)
     are {id, type} only.
     """
-    return await _call(ctx, "get_selection")
+    return await _call(ctx, "get_selection", **({"include_hierarchy": True} if include_hierarchy else {}))
 
 
 @mcp.tool()
 async def set_material(
     ctx: Context,
-    id: EntityId,
+    id: Annotated[EntityId, Field(description='Legacy entityID; must match instance_path when both are supplied')],
     material: Annotated[
         str,
         Field(min_length=1,
@@ -591,7 +632,7 @@ async def boolean_operation(
 @mcp.tool()
 async def chamfer_edge(
     ctx: Context,
-    id: EntityId,
+    id: Annotated[EntityId, Field(description='Legacy entityID; must match instance_path when both are supplied')],
     distance: Annotated[
         float, Field(gt=0, description="Chamfer distance in mm"),
     ] = 5.0,
@@ -613,7 +654,7 @@ async def chamfer_edge(
 @mcp.tool()
 async def fillet_edge(
     ctx: Context,
-    id: EntityId,
+    id: Annotated[EntityId, Field(description='Legacy entityID; must match instance_path when both are supplied')],
     radius: Annotated[
         float, Field(gt=0, description="Fillet radius in mm"),
     ] = 5.0,
@@ -671,6 +712,11 @@ async def get_viewport_screenshot(
         Field(description="Restore the camera and rendering options after "
                           "the shot, leaving the user's viewport unchanged"),
     ] = True,
+    scene_id: Annotated[EntityId | None, Field(description='Persistent Scene ID returned by list_scenes')] = None,
+    camera: Annotated[CameraSpec | None, Field(description='Explicit world-space camera with distances in mm')] = None,
+    frame_paths: Annotated[Paths | None, Field(description='Persistent-ID assembly paths to frame')] = None,
+    projection: Annotated[Literal["perspective", "parallel"] | None, Field(description='Perspective or parallel projection')] = None,
+    margin: Annotated[Annotated[Finite, Field(ge=1, le=10)] | None, Field(description='Framing multiplier, 1..10')] = None,
     # NB: bare `list` on purpose â€” `list[Image | str]` crashes FastMCP tool
     # registration on mcp 1.27.
 ) -> list:
@@ -690,8 +736,9 @@ async def get_viewport_screenshot(
       snapshotted before mutation and restored after the snapshot, so the
       user's viewport is unchanged.
 
-    If the connection drops mid-response the call is retried automatically;
-    the viewport may briefly flicker in that rare case.
+    Legacy capture retries after a stale connection. Structured capture with
+    scene/camera/framing parameters is not automatically replayed. See
+    docs/structured-assemblies.md for restoration and Scene property support.
     """
     # Delegate connection + send_command to _raw_call so we don't duplicate
     # the transport logic of _call. _raw_call does NOT translate
@@ -708,6 +755,9 @@ async def get_viewport_screenshot(
             zoom_extents=zoom_extents,
             style=style,
             restore_view=restore_view,
+            **{k: v for k, v in dict(scene_id=scene_id,
+                camera=camera.model_dump() if camera else None,
+                frame_paths=frame_paths, projection=projection, margin=margin).items() if v is not None},
         )
     except ConnectionError as e:
         raise SketchUpError(-32000, f"SketchUp not running: {e}") from e
@@ -755,6 +805,9 @@ async def get_viewport_screenshot(
         "preset_used": payload.get("preset_used"),
         "style_used": payload.get("style_used"),
     }
+    for key in ("camera", "scene_id"):
+        if key in payload:
+            meta[key] = payload[key]
     return [Image(data=png_bytes, format="png"), json.dumps(meta)]
 
 
@@ -793,6 +846,8 @@ async def list_components(
         Field(description="detailed includes bbox_mm per component; "
                           "concise omits it"),
     ] = "detailed",
+    parent_path: Annotated[ParentPath | None, Field(description='Parent persistent-ID path; empty string means model root')] = None,
+    include_hierarchy: Annotated[bool, Field(description='Include parent/instance paths and local/world matrices')] = False,
 ) -> str:
     """List groups and component instances in the model (paginated).
 
@@ -804,7 +859,10 @@ async def list_components(
     Returns: JSON {components[], total, offset, truncated} â€” if truncated,
     request the next page with offset += limit.
     """
-    return await _call(ctx, "list_components", recursive=recursive,
+    return await _call(ctx, "list_components",
+                       **({"parent_path": parent_path} if parent_path is not None else {}),
+                       **({"include_hierarchy": True} if include_hierarchy else {}),
+                       recursive=recursive,
                        max_depth=max_depth, limit=limit, offset=offset,
                        response_format=response_format)
 
@@ -812,13 +870,19 @@ async def list_components(
 @mcp.tool()
 async def get_component_info(
     ctx: Context,
-    id: EntityId,
+    id: Annotated[EntityId | None, Field(description='Legacy entityID; must match instance_path when both are supplied')] = None,
+    instance_path: Annotated[InstancePath | None, Field(description='Persistent-ID occurrence path from hierarchy inspection')] = None,
 ) -> str:
     """Detailed info for a single group or component instance by entity ID.
 
     Returns: JSON {id, name, type, layer, depth, bbox_mm|null}.
     """
-    return await _call(ctx, "get_component_info", id=str(id))
+    if id is None and instance_path is None:
+        raise ValueError("id or instance_path is required")
+    args = {"id": str(id)} if id is not None else {}
+    if instance_path is not None:
+        args["instance_path"] = instance_path
+    return await _call(ctx, "get_component_info", **args)
 
 
 @mcp.tool()
@@ -855,6 +919,8 @@ async def find_components(
         Field(description="detailed includes bbox_mm per component; "
                           "concise omits it"),
     ] = "detailed",
+    parent_path: Annotated[ParentPath | None, Field(description='Parent persistent-ID path; empty string means model root')] = None,
+    include_hierarchy: Annotated[bool, Field(description='Include parent/instance paths and local/world matrices')] = False,
 ) -> str:
     """Find components matching name substring, layer, and/or type.
 
@@ -874,6 +940,10 @@ async def find_components(
         args["layer"] = layer
     if type is not None:
         args["type"] = type
+    if parent_path is not None:
+        args["parent_path"] = parent_path
+    if include_hierarchy:
+        args["include_hierarchy"] = True
     return await _call(ctx, "find_components", **args)
 
 
@@ -992,3 +1062,7 @@ async def get_version(ctx: Context) -> str:
 
     return _payload(ruby_version, ruby_min, ruby_max, compatible, error_msg)
 
+
+
+# Register structured tools after shared wrappers are defined.
+import sketchup_mcp.assembly_tools  # noqa: E402, F401

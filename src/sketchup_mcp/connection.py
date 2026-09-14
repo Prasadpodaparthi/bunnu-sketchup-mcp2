@@ -58,6 +58,8 @@ _RETRY_SAFE_TOOLS: frozenset[str] = frozenset(
         "get_viewport_screenshot",  # read-only viewport capture; idempotent in
                                     # both restore_view modes (no document state changes)
         "get_version",              # read-only diagnostic; no side effects
+        "get_camera",
+        "list_scenes",
     }
 )
 
@@ -278,7 +280,12 @@ class SketchUpConnection:
                 # Retry ТОЛЬКО для side-effect-free tools: Ruby `write_response`
                 # может закрыть сокет уже после `commit_operation`, и тогда
                 # partial=b"" не гарантирует, что мутации не было.
-                if name in _RETRY_SAFE_TOOLS:
+                # Structured Scene capture can apply poses. Never replay a
+                # non-restoring capture after an uncertain response.
+                structured_capture = name == "get_viewport_screenshot" and any(
+                    key in args for key in ("scene_id", "camera", "frame_paths", "projection", "margin")
+                )
+                if name in _RETRY_SAFE_TOOLS and not structured_capture:
                     return await self._send_once(name, args)
                 # Мутативный / eval tool — НЕ ретраим (слепой retry мог бы
                 # задвоить уже закоммиченную мутацию). Но обогащаем ошибку именем

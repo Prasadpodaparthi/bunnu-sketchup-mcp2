@@ -32,18 +32,20 @@ module MCPforSketchUp
         # назвать то, что строит, иначе как через eval_ruby.
         name = params.key?("name") ? V.require_string(params, "name") : nil
 
+        context = Helpers::Paths.creation_context(params) if params.key?("parent_path")
         model = E.active_model!
         model.start_operation("Create Component (#{type.capitalize})", true)
         begin
           group = case type
-                  when "cube"     then build_cube(model.active_entities, pos, dims)
-                  when "cylinder" then build_cylinder(model.active_entities, pos, dims, segments)
-                  when "cone"     then build_cone(model.active_entities, pos, dims, segments)
-                  when "sphere"   then build_sphere(model.active_entities, pos, dims, segments)
+                  when "cube"     then build_cube(context ? context[:entities] : model.active_entities, pos, dims)
+                  when "cylinder" then build_cylinder(context ? context[:entities] : model.active_entities, pos, dims, segments)
+                  when "cone"     then build_cone(context ? context[:entities] : model.active_entities, pos, dims, segments)
+                  when "sphere"   then build_sphere(context ? context[:entities] : model.active_entities, pos, dims, segments)
                   end
           group.name = name if name
+          result = context ? Helpers::Paths.finish_creation(group, context) : describe_entity(group)
           model.commit_operation
-          describe_entity(group)
+          result
         rescue StandardError
           safe_abort(model)
           raise
@@ -101,6 +103,9 @@ module MCPforSketchUp
       # пост-трансформационного bounds.min, итоговый bbox-min равен цели
       # даже в комбинированных вызовах (ревью iter-1, CRIT-5).
       def self.transform_component(params)
+        if %w[instance_path coordinate_space translation_mm pivot_mm axis angle_degrees matrix_mm].any? { |k| params.key?(k) }
+          return Assemblies.transform_component(params)
+        end
         id = V.require_id(params)
         # position/scale in mm (rotation in degrees — not a size)
         position_mm = V.optional_coords3(params, "position")
